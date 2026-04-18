@@ -1,0 +1,333 @@
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
+import type { BlackbytesConfig } from "../../config/schema.js";
+import type { ExtensionAPI } from "../../types/pi.js";
+import { registerDelegateExploreTool } from "../explore.js";
+import { registerDelegateGeneralTool } from "../general.js";
+import { registerDelegateLibrarianTool } from "../librarian.js";
+import { registerDelegateOracleTool } from "../oracle.js";
+import type { SpawnFn } from "../runner.js";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const defaultConfig: BlackbytesConfig = {
+  disabled_tools: [],
+  disabled_sub_agents: [],
+  hashline_edit: true,
+  copilot_initiator_header: true,
+};
+
+function makeFakeChild(options: {
+  stdoutData?: string;
+  exitCode?: number | null;
+}) {
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    kill: (signal?: string) => void;
+    killed: boolean;
+    stdin: null;
+  };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.stdin = null;
+  child.killed = false;
+  child.kill = (_signal?: string) => {
+    child.killed = true;
+    process.nextTick(() => child.emit("close", null));
+  };
+
+  setTimeout(() => {
+    if (options.stdoutData) {
+      child.stdout.emit("data", Buffer.from(options.stdoutData));
+    }
+    child.emit("close", options.exitCode ?? 0);
+  }, 10);
+
+  return child;
+}
+
+/**
+ * Build a SpawnFn that captures args and returns a fake child process.
+ * The `onSpawn` callback receives the full args array for inspection.
+ */
+function makeCapturingSpawnFn(
+  opts: { stdoutData?: string; exitCode?: number },
+  onSpawn?: (args: string[]) => void,
+): SpawnFn {
+  return ((_cmd: string, args: string[]) => {
+    onSpawn?.(args);
+    return makeFakeChild(opts);
+  }) as unknown as SpawnFn;
+}
+
+/** Parse --tools value from pi args array into a string array. */
+function extractAllowedTools(args: string[]): string[] {
+  const idx = args.indexOf("--tools");
+  if (idx === -1) return [];
+  return (args[idx + 1] ?? "").split(",");
+}
+
+/** Builds a minimal fake ExtensionAPI that captures registered tools. */
+function makeFakePi(): ExtensionAPI & {
+  registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+} {
+  const registeredTools = new Map<string, { execute: (p: any) => Promise<any> }>();
+  return {
+    registeredTools,
+    on: () => {},
+    registerTool: (def: any) => {
+      registeredTools.set(def.name, def);
+    },
+    registerProvider: () => {},
+    registerCommand: () => {},
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Reset enabled-set singleton between tests
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  _resetEnabledSet();
+  delete process.env.PI_NESTED_DEPTH;
+});
+
+afterEach(() => {
+  _resetEnabledSet();
+  delete process.env.PI_NESTED_DEPTH;
+});
+
+// ---------------------------------------------------------------------------
+// delegate_explore
+// ---------------------------------------------------------------------------
+
+describe("delegate_explore", () => {
+  it("registers the tool when explore sub-agent is enabled", () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    registerDelegateExploreTool(pi);
+    assert.ok(pi.registeredTools.has("delegate_explore"), "delegate_explore should be registered");
+  });
+
+  it("skips registration when explore sub-agent is disabled", () => {
+    initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["explore"] });
+    const pi = makeFakePi();
+    registerDelegateExploreTool(pi);
+    assert.ok(
+      !pi.registeredTools.has("delegate_explore"),
+      "delegate_explore should NOT be registered",
+    );
+  });
+
+  it("calls runNestedPi with the read-only explore allowlist", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "found it", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateExploreTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_explore")!;
+
+    const result = await tool.execute({ question: "Where is the login function?" });
+
+    const allowedTools = extractAllowedTools(capturedArgs);
+    assert.deepEqual(allowedTools.sort(), ["ast_grep_search", "glob", "grep", "read"].sort());
+    assert.equal(result.content, "found it");
+  });
+
+  it("returns error string on failure", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    const spawnFn = makeCapturingSpawnFn({ exitCode: 1 });
+    registerDelegateExploreTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_explore")!;
+
+    const result = await tool.execute({ question: "something" });
+
+    assert.ok(result.content.startsWith("Error:"), `Expected error prefix, got: ${result.content}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// delegate_oracle
+// ---------------------------------------------------------------------------
+
+describe("delegate_oracle", () => {
+  it("registers the tool when oracle sub-agent is enabled", () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    registerDelegateOracleTool(pi);
+    assert.ok(pi.registeredTools.has("delegate_oracle"));
+  });
+
+  it("skips registration when oracle sub-agent is disabled", () => {
+    initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["oracle"] });
+    const pi = makeFakePi();
+    registerDelegateOracleTool(pi);
+    assert.ok(!pi.registeredTools.has("delegate_oracle"));
+  });
+
+  it("uses read-only allowlist and high reasoningEffort by default", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "oracle answer", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateOracleTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_oracle")!;
+
+    const result = await tool.execute({ question: "Why is this slow?" });
+
+    const allowedTools = extractAllowedTools(capturedArgs);
+    assert.deepEqual(allowedTools.sort(), ["ast_grep_search", "glob", "grep", "read"].sort());
+    assert.equal(result.content, "oracle answer");
+  });
+
+  it("includes context in userPrompt when provided", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateOracleTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_oracle")!;
+
+    await tool.execute({ question: "What is wrong?", context: "Error: ENOMEM" });
+
+    // The user prompt (-p arg) should contain the context
+    const pIdx = capturedArgs.indexOf("-p");
+    const userPromptArg = pIdx !== -1 ? capturedArgs[pIdx + 1] : "";
+    assert.ok(userPromptArg?.includes("Error: ENOMEM"), "context should appear in the -p argument");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// delegate_librarian
+// ---------------------------------------------------------------------------
+
+describe("delegate_librarian", () => {
+  it("registers the tool when librarian sub-agent is enabled", () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    registerDelegateLibrarianTool(pi);
+    assert.ok(pi.registeredTools.has("delegate_librarian"));
+  });
+
+  it("skips registration when librarian sub-agent is disabled", () => {
+    initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["librarian"] });
+    const pi = makeFakePi();
+    registerDelegateLibrarianTool(pi);
+    assert.ok(!pi.registeredTools.has("delegate_librarian"));
+  });
+
+  it("allowlist includes web search and context7 tools", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "docs found", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateLibrarianTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_librarian")!;
+
+    const result = await tool.execute({ question: "How does typebox work?" });
+
+    const allowedTools = extractAllowedTools(capturedArgs);
+    assert.ok(
+      allowedTools.includes("context7_resolve_library_id"),
+      "should include context7 resolve",
+    );
+    assert.ok(allowedTools.includes("context7_query_docs"), "should include context7 query");
+    assert.ok(allowedTools.includes("websearch_search"), "should include websearch");
+    assert.ok(allowedTools.includes("grep_app_search_github"), "should include grep_app");
+    assert.equal(result.content, "docs found");
+  });
+
+  it("returns error string on failure", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    const spawnFn = makeCapturingSpawnFn({ exitCode: 1 });
+    registerDelegateLibrarianTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_librarian")!;
+
+    const result = await tool.execute({ question: "anything" });
+    assert.ok(result.content.startsWith("Error:"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// delegate_general
+// ---------------------------------------------------------------------------
+
+describe("delegate_general", () => {
+  it("registers the tool when general sub-agent is enabled", () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    registerDelegateGeneralTool(pi);
+    assert.ok(pi.registeredTools.has("delegate_general"));
+  });
+
+  it("skips registration when general sub-agent is disabled", () => {
+    initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["general"] });
+    const pi = makeFakePi();
+    registerDelegateGeneralTool(pi);
+    assert.ok(!pi.registeredTools.has("delegate_general"));
+  });
+
+  it("allowlist excludes delegate_* tools", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "done", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateGeneralTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_general")!;
+
+    await tool.execute({ task: "Fix the bug" });
+
+    const allowedTools = extractAllowedTools(capturedArgs);
+    const hasDelegateTool = allowedTools.some((t) => t.startsWith("delegate_"));
+    assert.ok(!hasDelegateTool, "delegate_* tools must be excluded from allowlist");
+    assert.ok(allowedTools.length > 0, "allowlist should not be empty");
+  });
+
+  it("includes context in userPrompt when provided", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateGeneralTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_general")!;
+
+    await tool.execute({ task: "Implement X", context: "File is at src/foo.ts" });
+
+    const pIdx = capturedArgs.indexOf("-p");
+    const userPromptArg = pIdx !== -1 ? capturedArgs[pIdx + 1] : "";
+    assert.ok(userPromptArg?.includes("src/foo.ts"), "context should appear in the -p argument");
+  });
+});

@@ -1,0 +1,42 @@
+{
+  "name": "@blackbytes/pi-blackbytes",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "skills": [
+      "./skills/**/SKILL.md"
+    ]
+  },
+  "files": ["dist", "skills", "README.md", "CHANGELOG.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --fix src/",
+    "format": "biome format --write src/",
+    "bench:startup": "node --import tsx scripts/measure-startup.ts",
+    "bench:tool-result": "node --import tsx scripts/measure-tool-result.ts",
+    "check:size": "bash scripts/check-size.sh"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.33",
+    "fast-glob": "^3.3.3",
+    "zod": "^4"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.67"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5"
+  }
+}

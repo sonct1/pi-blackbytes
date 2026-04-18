@@ -1,0 +1,34 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+        pi-version: ['0.67.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm install @mariozechner/pi-coding-agent@${{ matrix.pi-version }}
+      - run: npm run build
+      - run: npm test
+  budgets:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - name: Startup benchmark
+        run: node --import tsx scripts/measure-startup.ts
+      - name: Tool result benchmark
+        run: node --import tsx scripts/measure-tool-result.ts
+      - name: Package size check
+        run: bash scripts/check-size.sh

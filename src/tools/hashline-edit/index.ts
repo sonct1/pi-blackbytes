@@ -1,21 +1,8 @@
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { type Static, Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "../../types/pi.js";
+import { computeCID } from "../../utils/cid.js";
 import { registerTool } from "../_shared/register-tool.js";
-
-// ---------------------------------------------------------------------------
-// CID helpers (same algorithm as tool-result.ts)
-// ---------------------------------------------------------------------------
-
-const CID_CHARS = "ZPMQVRWSNKTXJBYH";
-
-function computeCID(lineNum: number, content: string): string {
-  let hash = lineNum * 31;
-  for (let i = 0; i < Math.min(content.length, 32); i++) {
-    hash = (hash * 31 + content.charCodeAt(i)) & 0xffff;
-  }
-  return CID_CHARS[hash & 0xf] + CID_CHARS[(hash >> 4) & 0xf];
-}
 
 /** Format a file's lines into LINE#ID annotated text for error messages. */
 function annotateLines(lines: string[]): string {

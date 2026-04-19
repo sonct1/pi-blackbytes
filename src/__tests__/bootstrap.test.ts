@@ -7,11 +7,9 @@ import { bootstrap } from "../bootstrap.js";
 
 const EXPECTED_EVENTS = [
   "session_start",
-  "resources_discover",
   "before_agent_start",
   "model_select",
   "before_provider_request",
-  "tool_call",
   "tool_result",
   "session_shutdown",
 ];

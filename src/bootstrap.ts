@@ -4,10 +4,8 @@ import {
   handleBeforeAgentStart,
   handleBeforeProviderRequest,
   handleModelSelect,
-  handleResourcesDiscover,
   handleSessionShutdown,
   handleSessionStart,
-  handleToolCall,
   handleToolResult,
 } from "./handlers/index.js";
 import type { ExtensionAPI } from "./types/pi.js";
@@ -41,11 +39,9 @@ export function bootstrap(pi: ExtensionAPI): void {
     "session_start",
     wrap("session_start", (...args: any[]) => handleSessionStart(pi, ...args)),
   );
-  pi.on("resources_discover", wrap("resources_discover", handleResourcesDiscover));
   pi.on("before_agent_start", wrap("before_agent_start", handleBeforeAgentStart));
   pi.on("model_select", wrap("model_select", handleModelSelect));
   pi.on("before_provider_request", wrap("before_provider_request", handleBeforeProviderRequest));
-  pi.on("tool_call", wrap("tool_call", handleToolCall));
   pi.on("tool_result", wrap("tool_result", handleToolResult));
   pi.on("session_shutdown", wrap("session_shutdown", handleSessionShutdown));
   pi.registerCommand("blackbytes-status", async () => {

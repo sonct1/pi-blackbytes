@@ -149,10 +149,7 @@ describe("websearch_fetch", () => {
     const mockFetch: MockFetch = async (_opts) =>
       makeOkResult("<html><body>Hello world</body></html>");
 
-    const result = await executeWebsearchFetch(
-      { url: "https://example.com", format: "html" },
-      mockFetch,
-    );
+    const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
 
     assert.ok(result.content.includes("Hello world"), "Should include page content");
   });

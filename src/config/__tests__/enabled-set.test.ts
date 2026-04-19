@@ -6,6 +6,14 @@ import {
   getEnabledSet,
   initEnabledSet,
 } from "../enabled-set.js";
+import {
+  ALL_SUB_AGENT_NAMES,
+  ALL_TOOL_NAMES,
+  BUNDLED_TOOLS,
+  MCP_SERVERS,
+  SUB_AGENTS,
+  isBundledTool,
+} from "../resource-metadata.js";
 import type { BlackbytesConfig } from "../schema.js";
 
 const defaultConfig: BlackbytesConfig = {
@@ -68,5 +76,49 @@ describe("enabled-set", () => {
   it("computeEnabledSet is pure and does not affect singleton", () => {
     computeEnabledSet(defaultConfig);
     assert.throws(() => getEnabledSet(), /not initialized/);
+  });
+
+  describe("resource-metadata consistency", () => {
+    it("ALL_TOOL_NAMES matches bundled + MCP server tools", () => {
+      const expected = [
+        ...BUNDLED_TOOLS.map((t) => t.name),
+        ...MCP_SERVERS.flatMap((s) => s.tools),
+      ];
+      assert.deepEqual([...ALL_TOOL_NAMES], expected);
+    });
+
+    it("ALL_SUB_AGENT_NAMES matches SUB_AGENTS entries", () => {
+      assert.deepEqual(
+        [...ALL_SUB_AGENT_NAMES],
+        SUB_AGENTS.map((a) => a.name),
+      );
+    });
+
+    it("enabled-set default tool count matches ALL_TOOL_NAMES", () => {
+      const set = computeEnabledSet(defaultConfig);
+      assert.equal(set.tools.size, ALL_TOOL_NAMES.length);
+      for (const name of ALL_TOOL_NAMES) {
+        assert.ok(set.tools.has(name), `${name} should be in enabled tools`);
+      }
+    });
+
+    it("enabled-set default sub-agent count matches ALL_SUB_AGENT_NAMES", () => {
+      const set = computeEnabledSet(defaultConfig);
+      assert.equal(set.subAgents.size, ALL_SUB_AGENT_NAMES.length);
+      for (const name of ALL_SUB_AGENT_NAMES) {
+        assert.ok(set.subAgents.has(name), `${name} should be in enabled sub-agents`);
+      }
+    });
+
+    it("isBundledTool correctly identifies bundled vs MCP tools", () => {
+      for (const tool of BUNDLED_TOOLS) {
+        assert.ok(isBundledTool(tool.name), `${tool.name} should be bundled`);
+      }
+      for (const server of MCP_SERVERS) {
+        for (const toolName of server.tools) {
+          assert.ok(!isBundledTool(toolName), `${toolName} should not be bundled`);
+        }
+      }
+    });
   });
 });

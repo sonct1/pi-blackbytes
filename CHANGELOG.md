@@ -2,27 +2,32 @@
 
 ## 0.1.0 (2026-04-18)
 
-### Initial Release
+### Release surface
 
-First public release of `@blackbytes/pi-blackbytes` — a Pi coding agent extension providing enhanced file editing, web search, documentation lookup, and multi-agent delegation.
+- Bundled local tools: `glob`, `grep`, `ast_grep_search`, `ast_grep_replace`, `hashline_edit`
+- HTTP-backed tools: `websearch_search`, `websearch_fetch`, `context7_resolve_library_id`, `context7_query_docs`, `grep_app_search_github`
+- Delegate tools: `delegate_explore`, `delegate_oracle`, `delegate_librarian`, `delegate_general`
+- Pi commands: `/setup-models`, `/blackbytes-status`
+- Bundled skills: `blackbytes-overview`, `hashline-workflow`, `delegation`
 
-#### Features
-- **Local Search & Edit Tools**: `glob`, `grep`, `ast_grep_search`, `ast_grep_replace`, `hashline_edit`
-- **Web & Documentation Tools**: `websearch_search`, `websearch_fetch`, `context7_resolve_library_id`, `context7_query_docs`, `grep_app_search_github`
-- **Delegation Tools**: `delegate_explore`, `delegate_oracle`, `delegate_librarian`, `delegate_general`
-- **Interactive Setup**: `/setup-models` wizard for provider and API key configuration
-- **Bundled Skills**: blackbytes-overview, hashline-workflow, delegation
-- **Configuration**: JSON-only settings with disabled_tools/disabled_sub_agents, websearch/context7 provider config
-- **Performance**: session_start < 200ms (p95), tool_result handler < 50ms avg, package < 500KB gzipped
+### Runtime behavior
 
-#### Architecture Decisions
-- Single enabled-set computed at session_start, immutable for session lifetime
-- hashline_edit is complementary to Pi's native edit (narrow scope: read/write only)
-- Nested delegation uses subprocess with recursion guard (maxDepth=1)
-- JSON-only settings (no JSONC), atomic write with temp file + rename
+- The enabled tool/sub-agent set is computed once at `session_start` and reused across registration and prompt augmentation.
+- `before_agent_start` injects the Bytes prompt block and the current `<available_resources>` view.
+- `tool_result` rewrites Pi `read` and `write` output for the hashline workflow.
+- `before_provider_request` maps reasoning settings by model family and registers the GitHub Copilot initiator header when enabled.
+- Delegate sessions run with runtime-enforced tool allowlists and a one-level recursion guard.
 
-#### Known Limitations
-- No permission system for delegate tool access
-- No model fallback chain
-- JSON-only settings (no YAML/TOML)
-- Single Pi version tested (0.67.x)
+### Configuration
+
+- Strict JSON configuration under `settings.json › blackbytes`
+- Tool and sub-agent disabling via `disabled_tools` and `disabled_sub_agents`
+- Websearch provider selection via `websearch.provider` with `exa_api_key` or `tavily_api_key`
+- Optional Context7 API key under `context7.api_key`
+- Per-agent overrides under `sub_agents.<name>`
+
+### Constraints
+
+- Node `>=20`
+- Peer dependency: `@mariozechner/pi-coding-agent@^0.67`
+- Package budget: `< 500KB` gzipped

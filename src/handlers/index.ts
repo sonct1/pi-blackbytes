@@ -19,7 +19,7 @@ import { registerHashlineEditTool } from "../tools/hashline-edit/index.js";
 import { registerWebsearchFetchTool } from "../tools/websearch/fetch.js";
 import { registerWebsearchSearchTool } from "../tools/websearch/search.js";
 import type { ExtensionAPI } from "../types/pi.js";
-import { injectAvailableResources } from "./before-agent-start.js";
+import { injectPromptAugmentation } from "./before-agent-start.js";
 import { mapReasoningEffort } from "./before-provider-request.js";
 import { registerCopilotHeader } from "./copilot-header.js";
 import { type ToolResultEvent, processToolResult } from "./tool-result.js";
@@ -47,14 +47,10 @@ export async function handleSessionStart(pi: ExtensionAPI, ..._args: any[]): Pro
   registerDelegateGeneralTool(pi);
 }
 
-export async function handleResourcesDiscover(..._args: any[]): Promise<void> {
-  // TODO: implement resources_discover handler
-}
-
 export async function handleBeforeAgentStart(..._args: any[]): Promise<void> {
   const event = _args[0] as { systemPrompt?: string } | undefined;
   if (!event?.systemPrompt) return;
-  event.systemPrompt = injectAvailableResources(event.systemPrompt);
+  event.systemPrompt = injectPromptAugmentation(event.systemPrompt);
 }
 
 export async function handleModelSelect(..._args: any[]): Promise<void> {
@@ -73,10 +69,6 @@ export async function handleBeforeProviderRequest(..._args: any[]): Promise<void
   // Env var fallback allows sub-agents to inherit reasoning effort from parent
   const reasoningEffort = event.reasoningEffort ?? process.env.BLACKBYTES_REASONING_EFFORT;
   mapReasoningEffort(event.payload, reasoningEffort, family);
-}
-
-export async function handleToolCall(..._args: any[]): Promise<void> {
-  // TODO: implement tool_call handler
 }
 
 export async function handleToolResult(..._args: any[]): Promise<void> {

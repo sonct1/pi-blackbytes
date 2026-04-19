@@ -1,73 +1,103 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces MCP servers (websearch, context7, grep.app) with direct HTTP calls, adds local tools (hashline_edit, ast-grep, grep, glob), and provides sub-agent delegation (explore, oracle, librarian, general).
+Pi coding-agent extension that replaces the websearch, context7, and grep.app MCP surfaces with direct HTTP tools, adds bundled local tools (`hashline_edit`, `ast_grep_search`, `ast_grep_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`).
 
 ## Commands
 
+### Development
+
 ```bash
-bun run build          # tsc → dist/
-bun run test           # node --import tsx --test 'src/**/*.test.ts'
-bun run lint           # biome check src/
-bun run lint:fix       # biome check --fix src/
-bun run format         # biome format --write src/
-bun run bench:startup  # Startup latency benchmark
-bun run bench:tool-result  # Tool result processing benchmark
-bun run check:size     # Package must be < 500KB gzipped
+bun run build             # tsc -> dist/
+bun run test              # node --import tsx --test 'src/**/*.test.ts'
+bun run lint              # biome check src/
+bun run lint:fix          # biome check --fix src/
+bun run format            # biome format --write src/
+bun run bench:startup     # Startup latency benchmark
+bun run bench:tool-result # Tool result processing benchmark
+bun run check:size        # Package must be < 500KB gzipped
 ```
 
-Run in order: `lint → build → test`. Tests use Node's built-in test runner (`node:test`), not Jest/Vitest or bun's test runner.
+Run in order: `lint -> build -> test`.
+
+### Pi commands
+
+- `/setup-models` — interactive settings wizard
+- `/blackbytes-status` — print enabled resources and redacted config
 
 ## Architecture
 
-```
-src/index.ts → bootstrap(pi) → wires 8 event handlers:
-  session_start     → loads config, registers ALL tools + sub-agents
-  before_agent_start → injects <available_resources> into system prompt
-  before_provider_request → maps reasoning effort per model family
-  model_select      → tracks current model family
-  tool_result       → rewrites hashline_edit tool results
-  tool_call         → (TODO)
-  resources_discover → (TODO)
-  session_shutdown   → flushes logger
+```text
+src/index.ts -> bootstrap(pi) -> wires 6 event handlers + 2 commands:
+  session_start           -> loads config, computes enabled set, registers tools/sub-agents
+  before_agent_start      -> injects Bytes prompt + <available_resources>
+  model_select            -> tracks current model family
+  before_provider_request -> maps reasoning params by provider family
+  tool_result             -> rewrites read/write output for hashline workflow
+  session_shutdown        -> flushes logger
+
+  /setup-models           -> interactive config wizard
+  /blackbytes-status      -> current enabled resources + redacted config
 ```
 
 ### Registration flow (critical)
-All tools and sub-agents MUST be registered in `handleSessionStart()` (`src/handlers/index.ts`). If you add a new tool, you must:
-1. Create the register function in `src/tools/<name>/index.ts`
-2. Import and call it in `handleSessionStart()`
-3. Add the tool name to `DEFAULT_TOOLS` in `src/config/enabled-set.ts`
-4. Add it to `MCP_SERVERS` or `BUNDLED_TOOLS` in `src/handlers/before-agent-start.ts` so it appears in `<available_resources>`
+
+All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers/index.ts`). If you add or rename a tool:
+
+1. Create or update the register function in `src/tools/<name>/...` or `src/sub-agents/<name>.ts`
+2. Import and call it from `handleSessionStart()`
+3. Add the public name to `src/config/resource-metadata.ts`
+4. Ensure any enable/disable behavior still flows through `src/config/enabled-set.ts`
 
 ### Tool name conventions
-Tool names use `snake_case` everywhere (e.g., `websearch_search`, `context7_resolve_library_id`, `grep_app_search_github`). The names in `enabled-set.ts`, `before-agent-start.ts`, and the `registerXxxTool()` functions must all match exactly.
+
+Tool names use `snake_case` everywhere (for example `websearch_search`, `context7_resolve_library_id`, `grep_app_search_github`). Public tool names must match across:
+
+- the registration function
+- `src/config/resource-metadata.ts`
+- prompt and skill documentation
+- tests and config examples
 
 ### Config
-Config lives in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`) under a `"blackbytes"` key. Schema: `src/config/schema.ts`. Config controls:
-- `disabled_tools` / `disabled_sub_agents` — disable specific tools or agents
-- `hashline_edit` — enable/disable hashline rewriting (default: true)
-- `copilot_initiator_header` — enable/disable copilot header (default: true)
-- `websearch.provider` — `"exa"` or `"tavily"` with corresponding API key
-- `sub_agents.<name>.model` — override model per sub-agent
+
+Config lives in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`) under the top-level `blackbytes` key. Schema: `src/config/schema.ts`.
+
+Core settings:
+
+- `disabled_tools` / `disabled_sub_agents`
+- `hashline_edit`
+- `copilot_initiator_header`
+- `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
+- `context7.api_key`
+- `sub_agents.<name>.model`
+- `sub_agents.<name>.reasoningEffort`
+- `sub_agents.<name>.temperature`
+
+The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes` object are preserved.
+
+### Prompt injection
+
+`before_agent_start` loads the Bytes prompt variant from `src/prompts/` and wraps the current session resources in a sentinel-delimited augmentation block. The augmentation is idempotent: re-running the handler replaces the existing block instead of appending duplicates.
 
 ### Sub-agents
-Sub-agents spawn `pi -p` subprocesses via `src/sub-agents/runner.ts`. Each delegate tool (explore, oracle, librarian, general) is registered as a regular tool that invokes the runner. The runner passes `reasoningEffort` via `BLACKBYTES_REASONING_EFFORT` env var.
+
+Sub-agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
 
 ## Code style
 
 - Biome: 2-space indent, double quotes, semicolons, 100-char line width
-- `noExplicitAny: off` in biome config — `any` is tolerated but should be avoided
 - ESM only (`"type": "module"`), Node16 module resolution
-- All imports use `.js` extension (required by Node16 moduleResolution)
-- Tests: `src/**/*.test.ts`, colocated next to source. Use `describe`/`it` from `node:test` and `assert` from `node:assert/strict`
-- Test helpers in `src/test-utils/`
+- All relative imports use `.js` extensions
+- Tests live in `src/**/*.test.ts`
+- Use `describe`/`it` from `node:test` and assertions from `node:assert/strict`
+- Test helpers live in `src/test-utils/`
 
 ## Key constraints
 
-- Peer dependency: `@mariozechner/pi-coding-agent@^0.67` — the `ExtensionAPI` type comes from there (`src/types/pi.ts` has a local declaration)
-- Package budget: < 500KB gzipped (enforced in CI)
-- Node >= 20 required
-- Dependencies are minimal: `zod` (config validation), `@sinclair/typebox` (JSON schema for tool params), `fast-glob` (glob tool)
-- `processToolResult` in `src/handlers/tool-result.ts` creates a new object — must apply `modified.content` back to the mutable event in the handler
+- Peer dependency: `@mariozechner/pi-coding-agent@^0.67`
+- Node `>=20`
+- Package budget: `< 500KB` gzipped
+- Dependencies stay minimal: `zod`, `@sinclair/typebox`, `fast-glob`
+- `processToolResult` returns a new object; handlers must write `modified.content` back to the mutable event
 
 ---
 <!-- bv-agent-instructions-v2 -->
@@ -80,87 +110,60 @@ This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) 
 
 ### Using bv as an AI sidecar
 
-bv is a graph-aware triage engine for Beads projects (.beads/beads.jsonl). Instead of parsing JSONL or hallucinating graph traversal, use robot flags for deterministic, dependency-aware outputs with precomputed metrics (PageRank, betweenness, critical path, cycles, HITS, eigenvector, k-core).
-
-**Scope boundary:** bv handles *what to work on* (triage, priority, planning). `br` handles creating, modifying, and closing beads.
-
-**CRITICAL: Use ONLY --robot-* flags. Bare bv launches an interactive TUI that blocks your session.**
-
-#### The Workflow: Start With Triage
-
-**`bv --robot-triage` is your single entry point.** It returns everything you need in one call:
-- `quick_ref`: at-a-glance counts + top 3 picks
-- `recommendations`: ranked actionable items with scores, reasons, unblock info
-- `quick_wins`: low-effort high-impact items
-- `blockers_to_clear`: items that unblock the most downstream work
-- `project_health`: status/type/priority distributions, graph metrics
-- `commands`: copy-paste shell commands for next steps
+bv is a graph-aware triage engine for Beads projects (`.beads/issues.jsonl`). Use robot flags only; bare `bv` launches an interactive TUI.
 
 ```bash
-bv --robot-triage        # THE MEGA-COMMAND: start here
-bv --robot-next          # Minimal: just the single top pick + claim command
-
-# Token-optimized output (TOON) for lower LLM context usage:
+bv --robot-triage
+bv --robot-next
 bv --robot-triage --format toon
 ```
 
-#### Other bv Commands
+### Common bv commands
 
 | Command | Returns |
-|---------|---------|
-| `--robot-plan` | Parallel execution tracks with unblocks lists |
-| `--robot-priority` | Priority misalignment detection with confidence |
-| `--robot-insights` | Full metrics: PageRank, betweenness, HITS, eigenvector, critical path, cycles, k-core |
-| `--robot-alerts` | Stale issues, blocking cascades, priority mismatches |
-| `--robot-suggest` | Hygiene: duplicates, missing deps, label suggestions, cycle breaks |
-| `--robot-diff --diff-since <ref>` | Changes since ref: new/closed/modified issues |
-| `--robot-graph [--graph-format=json\|dot\|mermaid]` | Dependency graph export |
+|---|---|
+| `--robot-plan` | Parallel execution tracks with unblock information |
+| `--robot-priority` | Priority misalignment detection |
+| `--robot-insights` | Graph metrics and critical-path analysis |
+| `--robot-alerts` | Stale issues, blockers, priority mismatches |
+| `--robot-suggest` | Hygiene suggestions and duplicate detection |
+| `--robot-diff --diff-since <ref>` | Changes since a git ref |
+| `--robot-graph` | Dependency graph export |
 
-#### Scoping & Filtering
-
-```bash
-bv --robot-plan --label backend              # Scope to label's subgraph
-bv --robot-insights --as-of HEAD~30          # Historical point-in-time
-bv --recipe actionable --robot-plan          # Pre-filter: ready to work (no blockers)
-bv --recipe high-impact --robot-triage       # Pre-filter: top PageRank scores
-```
-
-### br Commands for Issue Management
+### Common br commands
 
 ```bash
-br ready              # Show issues ready to work (no blockers)
-br list --status=open # All open issues
-br show <id>          # Full issue details with dependencies
+br ready
+br list --status=open
+br show <id>
 br create --title="..." --type=task --priority=2
 br update <id> --status=in_progress
 br close <id> --reason="Completed"
-br close <id1> <id2>  # Close multiple issues at once
-br sync --flush-only  # Export DB to JSONL
+br sync --flush-only
 ```
 
-### Workflow Pattern
+### Workflow pattern
 
-1. **Triage**: Run `bv --robot-triage` to find the highest-impact actionable work
-2. **Claim**: Use `br update <id> --status=in_progress`
-3. **Work**: Implement the task
-4. **Complete**: Use `br close <id>`
-5. **Sync**: Always run `br sync --flush-only` at session end
+1. Run `bv --robot-triage`
+2. Claim work with `br update <id> --status=in_progress`
+3. Implement the task
+4. Close it with `br close <id>`
+5. Run `br sync --flush-only`
 
-### Key Concepts
+### Key concepts
 
-- **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
-- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers 0-4, not words)
-- **Types**: task, bug, feature, epic, chore, docs, question
-- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
+- Dependencies block downstream work.
+- Priority levels use numbers: P0-P4.
+- Common issue types: `task`, `bug`, `feature`, `epic`, `chore`, `docs`, `question`.
 
-### Session Protocol
+### Session protocol
 
 ```bash
-git status              # Check what changed
-git add <files>         # Stage code changes
-br sync --flush-only    # Export beads changes to JSONL
-git commit -m "..."     # Commit everything
-git push                # Push to remote
+git status
+git add <files>
+br sync --flush-only
+git commit -m "..."
+git push
 ```
 
 <!-- end-bv-agent-instructions -->

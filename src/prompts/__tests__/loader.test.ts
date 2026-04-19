@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import { afterEach, describe, it } from "node:test";
+import { _resetModelFamily, setModelFamily } from "../../shared/model-capability.js";
+import { loadBytesPrompt } from "../loader.js";
+
+describe("loadBytesPrompt", () => {
+  afterEach(() => {
+    _resetModelFamily();
+  });
+
+  it("loads default variant for claude family", () => {
+    setModelFamily("claude-sonnet-4-20250514");
+    const prompt = loadBytesPrompt();
+    assert.ok(prompt.includes("Bytes"));
+    assert.ok(prompt.length > 0);
+  });
+
+  it("loads gpt variant for GPT family", () => {
+    const prompt = loadBytesPrompt("gpt");
+    assert.ok(prompt.includes("Bytes"));
+    assert.ok(prompt.length > 0);
+  });
+
+  it("loads gemini variant for Gemini family", () => {
+    const prompt = loadBytesPrompt("gemini");
+    assert.ok(prompt.includes("Bytes"));
+    assert.ok(prompt.length > 0);
+  });
+
+  it("falls back to default for 'other' family", () => {
+    const defaultPrompt = loadBytesPrompt("claude");
+    const otherPrompt = loadBytesPrompt("other");
+    assert.equal(otherPrompt, defaultPrompt);
+  });
+
+  it("uses current model family when no argument provided", () => {
+    setModelFamily("gpt-4o");
+    const prompt = loadBytesPrompt();
+    const gptPrompt = loadBytesPrompt("gpt");
+    assert.equal(prompt, gptPrompt);
+  });
+});

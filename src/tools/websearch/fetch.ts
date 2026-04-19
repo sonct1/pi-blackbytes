@@ -6,12 +6,10 @@ import { registerTool } from "../_shared/register-tool.js";
 type FetchFn = (opts: HttpFetchOptions) => ReturnType<typeof httpFetch>;
 
 export async function executeWebsearchFetch(
-  params: { url: string; format?: "markdown" | "text" | "html"; timeout?: number },
+  params: { url: string; timeout?: number },
   fetchFn: FetchFn = httpFetch,
 ): Promise<{ content: string }> {
   let { url } = params;
-  // TODO: format parameter is accepted for API compatibility but not applied.
-  // Direct HTTP fetch cannot convert HTML→markdown without a rendering library.
   const { timeout } = params;
 
   // Upgrade http:// to https://
@@ -40,14 +38,8 @@ export function registerWebsearchFetchTool(pi: ExtensionAPI): void {
       "Fetch content from a URL and return it as text. Automatically upgrades http:// to https://.",
     parameters: Type.Object({
       url: Type.String({ description: "The URL to fetch" }),
-      format: Type.Optional(
-        Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("html")], {
-          description: "Desired output format (default: markdown)",
-        }),
-      ),
       timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (max 120)" })),
     }),
-    execute: (params: { url: string; format?: "markdown" | "text" | "html"; timeout?: number }) =>
-      executeWebsearchFetch(params),
+    execute: (params: { url: string; timeout?: number }) => executeWebsearchFetch(params),
   });
 }

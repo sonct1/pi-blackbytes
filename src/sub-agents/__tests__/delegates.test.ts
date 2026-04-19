@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
+import { ALL_TOOL_NAMES } from "../../config/resource-metadata.js";
 import type { BlackbytesConfig } from "../../config/schema.js";
 import type { ExtensionAPI } from "../../types/pi.js";
 import { registerDelegateExploreTool } from "../explore.js";
@@ -310,6 +311,26 @@ describe("delegate_general", () => {
     const hasDelegateTool = allowedTools.some((t) => t.startsWith("delegate_"));
     assert.ok(!hasDelegateTool, "delegate_* tools must be excluded from allowlist");
     assert.ok(allowedTools.length > 0, "allowlist should not be empty");
+  });
+
+  it("allowlist includes all enabled extension tools except delegate_*", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "done", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerDelegateGeneralTool(pi, spawnFn);
+    const tool = pi.registeredTools.get("delegate_general")!;
+
+    await tool.execute({ task: "Fix the bug" });
+
+    const allowedTools = new Set(extractAllowedTools(capturedArgs));
+    for (const name of ALL_TOOL_NAMES) {
+      assert.ok(allowedTools.has(name), `general should have access to ${name}`);
+    }
   });
 
   it("includes context in userPrompt when provided", async () => {

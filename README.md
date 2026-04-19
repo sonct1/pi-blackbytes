@@ -1,26 +1,33 @@
 # @blackbytes/pi-blackbytes
 
-Pi coding-agent extension providing local search, web research, documentation lookup, and multi-agent delegation tools.
+Pi coding-agent extension that provides local search tools, direct HTTP replacements for the websearch/context7/grep.app MCP surfaces, hashline-based editing, and delegated sub-agents for exploration, research, consultation, and implementation.
 
 ## Installation
 
-```
+```bash
 pi install bun:@blackbytes/pi-blackbytes
 ```
 
-## Quick Start
+## Quick start
 
-After installation, run the setup wizard to configure providers and API keys:
+Run the setup wizard after installation:
 
-```
+```bash
 /setup-models
 ```
 
-Or manually edit `~/.pi/agent/settings.json` to add your configuration (see [Configuration Reference](#configuration-reference) below).
+The wizard configures provider credentials, websearch, optional Context7 access, and Blackbytes-specific settings in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`).
 
-## Configuration Reference
+## Pi commands
 
-Add a `blackbytes` block to `~/.pi/agent/settings.json`:
+| Command | Purpose |
+|---|---|
+| `/setup-models` | Interactive setup for provider keys, websearch, Context7, and related Blackbytes settings |
+| `/blackbytes-status` | Print enabled tools, enabled sub-agents, enabled skills, and the current redacted `blackbytes` config |
+
+## Configuration
+
+Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 
 ```json
 {
@@ -29,107 +36,173 @@ Add a `blackbytes` block to `~/.pi/agent/settings.json`:
     "disabled_sub_agents": [],
     "hashline_edit": true,
     "copilot_initiator_header": true,
-    "websearch": { "provider": "exa", "api_key": "YOUR_EXA_KEY" },
-    "context7": { "api_key": "YOUR_CONTEXT7_KEY" },
-    "sub_agents": { "model": "YOUR_MODEL_ID", "reasoningEffort": "medium" }
+    "websearch": {
+      "provider": "exa",
+      "exa_api_key": "YOUR_EXA_KEY"
+    },
+    "context7": {
+      "api_key": "YOUR_CONTEXT7_KEY"
+    },
+    "sub_agents": {
+      "oracle": {
+        "model": "openai/gpt-5.4",
+        "reasoningEffort": "high",
+        "temperature": 0.2
+      },
+      "general": {
+        "model": "openai/gpt-5.4"
+      }
+    }
   }
 }
 ```
 
-**Notes:**
-- The settings file must be valid JSON (no comments, no trailing commas — JSONC is not supported).
-- The enabled tool set is computed once at session start and remains fixed for the duration of the session.
-- `disabled_tools` accepts canonical tool names (see [Tools](#tools) below).
-- `disabled_sub_agents` accepts agent names: `explore`, `oracle`, `librarian`, `general`.
-- `websearch.provider` accepts `"exa"` or `"tavily"`.
+### Supported keys
 
-## Tools
+| Key | Type | Meaning |
+|---|---|---|
+| `disabled_tools` | `string[]` | Disables specific public tool names for the entire session |
+| `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general")[]` | Disables delegate tools by agent name |
+| `hashline_edit` | `boolean` | Enables hashline rewriting for Pi `read`/`write` tool results |
+| `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `x-initiator: agent` |
+| `websearch.provider` | `"exa" \| "tavily"` | Selects the websearch backend |
+| `websearch.exa_api_key` | `string` | Exa credential |
+| `websearch.tavily_api_key` | `string` | Tavily credential |
+| `context7.api_key` | `string` | Context7 credential |
+| `sub_agents.<name>.model` | `string` | Per-agent model override |
+| `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
+| `sub_agents.<name>.temperature` | `number` | Per-agent temperature override |
 
-### Local Search and Edit
+### Configuration notes
 
-| Tool | Description |
-|------|-------------|
-| `glob` | File pattern matching with 100-file cap and 60-second timeout |
-| `grep` | Content search with regex using ripgrep with Node.js fallback |
-| `ast_grep_search` | AST-aware code pattern search across 25 languages |
-| `ast_grep_replace` | AST-aware code rewrite with dry-run as default |
-| `hashline_edit` | Precise LINE#ID anchored file editing (see [hashline_edit](#hashline_edit)) |
+- The settings file is strict JSON. Comments and trailing commas are not supported.
+- The enabled tool/sub-agent set is computed once at `session_start` and remains fixed for that session.
+- Unknown keys inside `blackbytes` are preserved by the parser, so wizard-managed passthrough values can coexist with the validated Blackbytes settings.
+- `disabled_tools` uses public tool names such as `hashline_edit` or `context7_query_docs`.
+- `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`.
 
-### Web and Documentation
+## Tool surface
 
-| Tool | Description |
-|------|-------------|
-| `websearch_search` | Web search via Exa or Tavily |
-| `websearch_fetch` | Fetch and convert URL content to markdown or text |
-| `context7_resolve_library_id` | Resolve a library name to its Context7 ID |
-| `context7_query_docs` | Query library documentation via Context7 |
+### Bundled local tools
+
+| Tool | Purpose |
+|---|---|
+| `glob` | Fast file pattern matching with safety limits |
+| `grep` | Regex content search with include filters and multiple output modes |
+| `ast_grep_search` | AST-aware structural search across 25 languages |
+| `ast_grep_replace` | AST-aware structural rewrite with dry-run default |
+| `hashline_edit` | LINE#ID-anchored file editing with snapshot semantics |
+
+### HTTP-backed tools
+
+| Tool | Purpose |
+|---|---|
+| `websearch_search` | Web search through Exa or Tavily |
+| `websearch_fetch` | Fetch and convert a specific URL |
+| `context7_resolve_library_id` | Resolve a library/package to a Context7 ID |
+| `context7_query_docs` | Query current library documentation and examples from Context7 |
 | `grep_app_search_github` | Search code patterns across public GitHub repositories |
 
-### Delegation
+### Delegate tools
 
-| Tool | Description |
-|------|-------------|
-| `delegate_explore` | Read-only codebase search (grep, glob, read, ast_grep_search) |
-| `delegate_oracle` | High-reasoning read-only consultation for hard problems |
-| `delegate_librarian` | Documentation and cross-repository research |
-| `delegate_general` | Full-access implementation executor |
+| Tool | Purpose |
+|---|---|
+| `delegate_explore` | Read-only codebase discovery for “where is X?” work |
+| `delegate_oracle` | Read-only high-reasoning consultation for difficult debugging or design questions |
+| `delegate_librarian` | Read-only docs, web, and cross-repository research |
+| `delegate_general` | Full-access execution for well-scoped multi-file implementation work |
 
-## hashline_edit
+Blackbytes also injects an `<available_resources>` block into the primary agent prompt so the model sees the currently enabled bundled tools, HTTP tools, and sub-agents for the session.
 
-`hashline_edit` is a complementary editing tool, not a replacement for Pi's native edit. It uses LINE#ID anchors (e.g., `11#XJ`) derived from a file read to identify exact edit targets, making it resilient to surrounding context changes.
+## `hashline_edit`
 
-**Workflow:**
+`hashline_edit` works alongside Pi's native `edit` tool. It is optimized for precise, low-ambiguity edits by anchoring each mutation to a tagged line reference from `read` output.
 
-1. Read the target file to obtain LINE#ID tags.
-2. Identify the lines to change using their `{line_number}#{hash_id}` tags.
-3. Submit a single edit call with all related operations batched.
-4. Re-read the file before issuing another edit call on the same file.
+### Workflow
 
-**Key properties:**
-- All edits in one call reference the original file state (snapshot semantics). Do not adjust line numbers for prior edits in the same call — the system applies them bottom-up automatically.
-- Supports `replace`, `append`, and `prepend` operations.
-- Range replacements use `pos` and `end` to define an inclusive block.
-- Passing `lines: null` deletes the targeted lines.
+1. Read the file first and copy the `LINE#ID` anchors.
+2. Build one `hashline_edit` call per file with all related edits batched together.
+3. Use `replace`, `append`, or `prepend` against the copied anchors.
+4. Re-read the file before issuing a second `hashline_edit` call on that same file.
 
-Load the `hashline-workflow` skill for the full workflow guide.
+### Properties
 
-## Delegation
+- All edits in a single call refer to the original file snapshot.
+- The tool supports single-line replacement, range replacement, deletion, prepend, append, and BOF/EOF insertion.
+- `lines: null` deletes the targeted line or range.
+- When a mismatch occurs, the tool returns updated anchors for recovery.
 
-Use delegation to offload work to a specialized sub-agent:
+Load the bundled `hashline-workflow` skill for the detailed operating guide.
 
-- **`delegate_explore`** — Searching a codebase for patterns, symbols, or files. Read-only. Fast and low cost.
-- **`delegate_oracle`** — Hard architectural decisions, complex debugging, high-stakes reasoning. Read-only and expensive; use sparingly.
-- **`delegate_librarian`** — Looking up library internals, fetching remote documentation, or finding usage examples across open-source repositories.
-- **`delegate_general`** — Heavy implementation work: writing, editing, and verifying changes across multiple files. Receives all tools except the `delegate_*` tools to prevent recursion.
+## Delegation model
 
-Load the `delegation` skill for detailed guidance on when to use each agent.
+- **Explore** locates files, symbols, and call sites in the local repository.
+- **Oracle** handles hard architectural reasoning and elevated debugging.
+- **Librarian** researches external APIs, official docs, and public code examples.
+- **General** executes large, well-defined implementation tasks with the session's enabled tool set.
 
-## Bundled Skills
+Nested delegation is limited to one level. Delegate sessions do not receive the `delegate_*` tools again, so recursion is blocked at runtime rather than by prompt text alone.
 
-| Skill | Description |
-|-------|-------------|
-| `blackbytes-overview` | Orientation to the extension, its tools, and configuration |
-| `hashline-workflow` | Step-by-step LINE#ID editing workflow |
-| `delegation` | Decision guide for choosing the right delegate agent |
+## Bundled skills
 
-Skills are loaded via Pi's skill system and inject detailed instructions into the agent context.
+| Skill | Purpose |
+|---|---|
+| `blackbytes-overview` | Orientation to Blackbytes tools, agents, and operating model |
+| `hashline-workflow` | Detailed LINE#ID editing workflow |
+| `delegation` | Guide for choosing the right delegate agent |
 
-## /setup-models Command
+## Development
 
-`/setup-models` is an interactive wizard that walks through provider selection and API key entry for websearch and Context7. It writes configuration atomically and preserves any existing settings in the file.
+```bash
+bun run lint
+bun run build
+bun run test
 
-Run it any time to update keys or switch providers without editing JSON by hand.
+bun run lint:fix
+bun run format
+bun run bench:startup
+bun run bench:tool-result
+bun run check:size
+```
+
+Recommended verification order:
+
+1. `bun run lint`
+2. `bun run build`
+3. `bun run test`
+
+## Architecture summary
+
+The extension bootstraps from `src/index.ts` and wires the core session handlers in `src/bootstrap.ts`:
+
+- `session_start` loads config, computes the enabled set, registers tools, and registers delegate agents
+- `before_agent_start` injects the Bytes prompt augmentation and `<available_resources>`
+- `model_select` caches the current model family
+- `before_provider_request` maps reasoning settings to provider-native fields
+- `tool_result` rewrites `read`/`write` results for the hashline workflow
+- `session_shutdown` flushes the buffered logger
 
 ## Troubleshooting
 
-**Websearch or Context7 tools are not working.**
-Check that `websearch.api_key` and `context7.api_key` are set in your `settings.json`. Without valid keys, those tools will fail or be unavailable.
+### Websearch tools are unavailable
 
-**A tool is missing from the agent.**
-Check `disabled_tools` in your config. Remove the tool name from the array to re-enable it. Reload the session after saving.
+Check `blackbytes.websearch.provider` and the matching credential field:
 
-**AST search or replace tools fail.**
-`ast_grep_search` and `ast_grep_replace` require `ast-grep` (`sg`) to be installed and on your PATH. Install it from [ast-grep.github.io](https://ast-grep.github.io) or via your package manager.
+- Exa → `blackbytes.websearch.exa_api_key`
+- Tavily → `blackbytes.websearch.tavily_api_key`
 
-**grep is slow.**
-`grep` prefers `rg` (ripgrep) for performance. If `rg` is not found, it falls back to a Node.js implementation which is slower on large codebases. Install ripgrep from [github.com/BurntSushi/ripgrep](https://github.com/BurntSushi/ripgrep).
+### Context7 tools are unavailable
+
+Set `blackbytes.context7.api_key`.
+
+### A delegate or tool is missing
+
+Check `disabled_tools` and `disabled_sub_agents`, then start a new session so the enabled set is recomputed.
+
+### `ast_grep_*` fails immediately
+
+Install `ast-grep` (`sg`) and ensure it is on `PATH`.
+
+### `grep` is slower than expected
+
+Install `ripgrep` (`rg`). Blackbytes uses it when available and falls back to a Node.js implementation otherwise.

@@ -1,5 +1,5 @@
 import { getEnabledSet } from "../config/enabled-set.js";
-import { BUNDLED_TOOLS, SUB_AGENTS, TOOL_GROUPS } from "../config/resource-metadata.js";
+import { BUNDLED_TOOLS, TOOL_GROUPS, getRegisteredSubAgents } from "../config/resource-metadata.js";
 import { createBytesPromptRenderContext } from "../prompts/bytes/shared.js";
 import { renderBytesPrompt } from "../prompts/loader.js";
 import { resolvePromptModelFamily } from "../shared/model-capability.js";
@@ -43,7 +43,7 @@ function buildResourcesBlock(
   }
 
   // Available agents
-  const activeAgents = SUB_AGENTS.filter((a) => enabledSubAgents.has(a.name));
+  const activeAgents = getRegisteredSubAgents().filter((a) => enabledSubAgents.has(a.name));
   if (activeAgents.length > 0) {
     lines.push("");
     lines.push("Available agents:");

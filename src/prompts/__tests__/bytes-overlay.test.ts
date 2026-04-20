@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
+import {
+  SUB_AGENTS,
+  _resetSubAgentRegistry,
+  registerSubAgentMeta,
+} from "../../config/resource-metadata.js";
 import { createBytesPromptRenderContext } from "../bytes/shared.js";
 import { renderBytesPrompt } from "../loader.js";
 
@@ -12,6 +17,11 @@ function renderPrompt(
     createBytesPromptRenderContext(family, new Set(enabledTools), new Set(enabledSubAgents)),
   );
 }
+
+beforeEach(() => {
+  _resetSubAgentRegistry();
+  for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
+});
 
 describe("bytes overlay rendering", () => {
   it("renders full-capability sessions across model families", () => {

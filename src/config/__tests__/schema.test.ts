@@ -59,16 +59,13 @@ describe("BlackbytesConfigSchema", () => {
     }
   });
 
-  it("enum validation works for disabled_sub_agents", () => {
-    const result = parseBlackbytesConfig({ disabled_sub_agents: ["invalid_agent"] });
-    assert.ok(!result.ok);
-    if (!result.ok) {
-      assert.ok(result.errors.length > 0);
-    }
-
-    const validResult = parseBlackbytesConfig({
-      disabled_sub_agents: ["explore", "librarian", "general"],
+  it("accepts arbitrary strings in disabled_sub_agents", () => {
+    const result = parseBlackbytesConfig({
+      disabled_sub_agents: ["custom_yaml_agent", "explore"],
     });
-    assert.ok(validResult.ok);
+    assert.ok(result.ok);
+    if (result.ok) {
+      assert.deepEqual(result.value.disabled_sub_agents, ["custom_yaml_agent", "explore"]);
+    }
   });
 });

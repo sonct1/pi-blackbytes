@@ -1,11 +1,9 @@
 import { z } from "zod";
 
-const SubAgentNameEnum = z.enum(["explore", "oracle", "librarian", "general"]);
-
 export const BlackbytesConfigSchema = z
   .object({
     disabled_tools: z.array(z.string()).default([]),
-    disabled_sub_agents: z.array(SubAgentNameEnum).default([]),
+    disabled_sub_agents: z.array(z.string()).default([]),
     hashline_edit: z.boolean().default(true),
     copilot_initiator_header: z.boolean().default(true),
     websearch: z

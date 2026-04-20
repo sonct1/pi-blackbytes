@@ -29,6 +29,7 @@
   "dependencies": {
     "@sinclair/typebox": "^0.33",
     "fast-glob": "^3.3.3",
+    "yaml": "^2.8.3",
     "zod": "^4"
   },
   "peerDependencies": {

@@ -6,6 +6,8 @@ import {
   BUNDLED_TOOLS,
   SUB_AGENTS,
   TOOL_GROUPS,
+  _resetSubAgentRegistry,
+  registerSubAgentMeta,
 } from "../../config/resource-metadata.js";
 import { parseBlackbytesConfig } from "../../config/schema.js";
 import { injectPromptAugmentation } from "../before-agent-start.js";
@@ -18,10 +20,16 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   _resetEnabledSet();
+  _resetSubAgentRegistry();
 });
+
+function seedBuiltinAgents() {
+  for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
+}
 
 describe("injectPromptAugmentation", () => {
   it("first turn: appends resources block to system prompt", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig());
     const original = "You are a helpful assistant.";
     const result = injectPromptAugmentation(original);
@@ -34,6 +42,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("includes prompt guidance in augmentation block", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("Base prompt.");
     assert.ok(result.includes("Hard Boundaries"), "prompt guidance content present");
@@ -44,6 +53,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("second turn: replaces existing block in-place (no duplicates)", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig());
     const original = "You are a helpful assistant.";
     const first = injectPromptAugmentation(original);
@@ -57,6 +67,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("disabled tool group is excluded when all its tools are disabled", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig({ disabled_tools: ["grep_app_search_github"] }));
     const result = injectPromptAugmentation("prompt");
     assert.ok(!result.includes("grep_app"), "disabled tool group not listed");
@@ -64,6 +75,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("resource block lists exact enabled tools for partially enabled groups", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig({ disabled_tools: ["websearch_search", "context7_query_docs"] }));
     const result = injectPromptAugmentation("prompt");
 
@@ -80,6 +92,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("disabled sub-agent is excluded from resources block", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig({ disabled_sub_agents: ["oracle"] }));
     const result = injectPromptAugmentation("prompt");
     assert.ok(!result.includes("oracle"), "disabled agent not listed");
@@ -87,6 +100,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("resource block lists bundled tools and tool group descriptions", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("prompt");
     for (const tool of BUNDLED_TOOLS) {
@@ -101,6 +115,7 @@ describe("injectPromptAugmentation", () => {
   });
 
   it("resource block lists all enabled sub-agents from shared metadata", () => {
+    seedBuiltinAgents();
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("prompt");
     for (const agent of SUB_AGENTS) {
@@ -153,6 +168,7 @@ it("renders capability-aware prompt sections from enabled resources", () => {
 });
 
 it("does not advertise docs lookup when only context7 resolve is enabled", () => {
+  seedBuiltinAgents();
   initEnabledSet(makeConfig({ disabled_tools: ["context7_query_docs"] }));
   const result = injectPromptAugmentation("prompt");
 
@@ -165,6 +181,7 @@ it("does not advertise docs lookup when only context7 resolve is enabled", () =>
 });
 
 it("does not advertise web lookup when websearch is fully disabled", () => {
+  seedBuiltinAgents();
   initEnabledSet(makeConfig({ disabled_tools: ["websearch_search", "websearch_fetch"] }));
   const result = injectPromptAugmentation("prompt");
 

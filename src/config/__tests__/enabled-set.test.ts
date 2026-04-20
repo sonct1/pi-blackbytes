@@ -12,8 +12,10 @@ import {
   BUNDLED_TOOLS,
   SUB_AGENTS,
   TOOL_GROUPS,
+  _resetSubAgentRegistry,
   derivePromptFeatureFlags,
   isBundledTool,
+  registerSubAgentMeta,
 } from "../resource-metadata.js";
 import type { BlackbytesConfig } from "../schema.js";
 
@@ -27,7 +29,12 @@ const defaultConfig: BlackbytesConfig = {
 describe("enabled-set", () => {
   beforeEach(() => {
     _resetEnabledSet();
+    _resetSubAgentRegistry();
   });
+
+  function seedBuiltinAgents() {
+    for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
+  }
 
   it("default config enables all tools, subAgents, and skills", () => {
     const set = computeEnabledSet(defaultConfig);
@@ -63,6 +70,32 @@ describe("enabled-set", () => {
     assert.ok(!set.subAgents.has("oracle"));
     assert.ok(set.subAgents.has("librarian"));
     assert.equal(set.subAgents.size, 2);
+  });
+
+  it("computeEnabledSet accepts dynamic agent names", () => {
+    const customAgents = ["explore", "oracle", "yaml-researcher"];
+    const config: BlackbytesConfig = {
+      ...defaultConfig,
+      disabled_sub_agents: ["oracle"],
+    };
+    const set = computeEnabledSet(config, customAgents);
+    assert.ok(set.subAgents.has("explore"));
+    assert.ok(!set.subAgents.has("oracle"));
+    assert.ok(set.subAgents.has("yaml-researcher"));
+    assert.equal(set.subAgents.size, 2);
+    // tools are unaffected by agent names
+    assert.equal(set.tools.size, ALL_TOOL_NAMES.length);
+  });
+
+  it("unknown disabled_sub_agents are harmless no-ops", () => {
+    const config: BlackbytesConfig = {
+      ...defaultConfig,
+      disabled_sub_agents: ["nonexistent", "explore"],
+    };
+    const set = computeEnabledSet(config);
+    assert.ok(!set.subAgents.has("explore"));
+    assert.ok(!set.subAgents.has("nonexistent"));
+    assert.equal(set.subAgents.size, ALL_SUB_AGENT_NAMES.length - 1);
   });
 
   it("getEnabledSet throws before init", () => {
@@ -123,6 +156,7 @@ describe("enabled-set", () => {
     });
 
     it("derivePromptFeatureFlags reflects enabled tools and sub-agents", () => {
+      seedBuiltinAgents();
       const set = computeEnabledSet(defaultConfig);
       const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
 
@@ -136,6 +170,7 @@ describe("enabled-set", () => {
     });
 
     it("derivePromptFeatureFlags drops features when backing resources are disabled", () => {
+      seedBuiltinAgents();
       const set = computeEnabledSet({
         ...defaultConfig,
         disabled_tools: [
@@ -160,6 +195,7 @@ describe("enabled-set", () => {
     });
 
     it("derivePromptFeatureFlags keeps exact capabilities for partially enabled tool groups", () => {
+      seedBuiltinAgents();
       const set = computeEnabledSet({
         ...defaultConfig,
         disabled_tools: ["context7_query_docs", "websearch_search"],

@@ -7,12 +7,16 @@ export interface EnabledSet {
   readonly skills: ReadonlySet<string>;
 }
 
-export function computeEnabledSet(config: BlackbytesConfig): EnabledSet {
+export function computeEnabledSet(
+  config: BlackbytesConfig,
+  knownAgentNames?: readonly string[],
+): EnabledSet {
   const disabledTools = new Set(config.disabled_tools ?? []);
   const disabledSubAgents = new Set<string>(config.disabled_sub_agents ?? []);
 
   const tools = new Set(ALL_TOOL_NAMES.filter((t) => !disabledTools.has(t)));
-  const subAgents = new Set(ALL_SUB_AGENT_NAMES.filter((a) => !disabledSubAgents.has(a)));
+  const agentNames = knownAgentNames ?? ALL_SUB_AGENT_NAMES;
+  const subAgents = new Set(agentNames.filter((a) => !disabledSubAgents.has(a)));
   const skills = new Set(DEFAULT_SKILLS);
 
   return Object.freeze({ tools, subAgents, skills });
@@ -20,11 +24,14 @@ export function computeEnabledSet(config: BlackbytesConfig): EnabledSet {
 
 let sessionSet: EnabledSet | null = null;
 
-export function initEnabledSet(config: BlackbytesConfig): EnabledSet {
+export function initEnabledSet(
+  config: BlackbytesConfig,
+  knownAgentNames?: readonly string[],
+): EnabledSet {
   if (sessionSet !== null) {
     throw new Error("EnabledSet already initialized for this session");
   }
-  sessionSet = computeEnabledSet(config);
+  sessionSet = computeEnabledSet(config, knownAgentNames);
   return sessionSet;
 }
 

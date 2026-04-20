@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import {
   BUNDLED_TOOLS,
   SUB_AGENTS,
   TOOL_GROUPS,
+  _resetSubAgentRegistry,
   derivePromptFeatureFlags,
+  registerSubAgentMeta,
 } from "../../config/resource-metadata.js";
 import type { PromptFeatureKey } from "../../config/resource-metadata.js";
 import { createBytesPromptRenderContext } from "../bytes/shared.js";
 import { renderBytesPrompt } from "../loader.js";
+
+beforeEach(() => {
+  _resetSubAgentRegistry();
+  for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
+});
 
 const CAPABILITY_SNIPPETS: Record<PromptFeatureKey, string> = {
   hashlineEdit: "Hashline Edit Workflow",

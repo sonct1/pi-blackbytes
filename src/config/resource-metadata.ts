@@ -75,6 +75,38 @@ export const SUB_AGENTS: readonly SubAgentMeta[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Runtime sub-agent metadata registry
+// ---------------------------------------------------------------------------
+
+let registeredAgents: SubAgentMeta[] = [];
+
+/**
+ * Register sub-agent metadata at runtime.
+ * Rejects duplicates by name.
+ */
+export function registerSubAgentMeta(meta: SubAgentMeta): void {
+  if (registeredAgents.some((a) => a.name === meta.name)) {
+    throw new Error(`Sub-agent metadata already registered: "${meta.name}"`);
+  }
+  registeredAgents.push(meta);
+}
+
+/** Returns all sub-agent metadata registered for this session. */
+export function getRegisteredSubAgents(): readonly SubAgentMeta[] {
+  return registeredAgents;
+}
+
+/** Returns the names of all registered sub-agents. */
+export function getRegisteredSubAgentNames(): readonly string[] {
+  return registeredAgents.map((a) => a.name);
+}
+
+// For testing only
+export function _resetSubAgentRegistry(): void {
+  registeredAgents = [];
+}
+
 export const DEFAULT_SKILLS: readonly string[] = [
   "implementing-beads",
   "planning-from-spec",
@@ -117,7 +149,7 @@ export function derivePromptFeatureFlags(
 ): PromptFeatureFlags {
   return {
     hashlineEdit: enabledTools.has("hashline_edit"),
-    subagentDelegation: SUB_AGENTS.some((agent) => enabledSubAgents.has(agent.name)),
+    subagentDelegation: registeredAgents.some((agent) => enabledSubAgents.has(agent.name)),
     documentationLookup: enabledTools.has("context7_query_docs"),
     githubCodeSearch: enabledTools.has("grep_app_search_github"),
     webSearch: enabledTools.has("websearch_search") || enabledTools.has("websearch_fetch"),

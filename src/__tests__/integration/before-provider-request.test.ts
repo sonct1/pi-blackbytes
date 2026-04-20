@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { after, afterEach, before, describe, it } from "node:test";
 import { bootstrap } from "../../bootstrap.js";
 import { _resetEnabledSet, getEnabledSet } from "../../config/enabled-set.js";
+import { _resetSubAgentRegistry } from "../../config/resource-metadata.js";
 import { _resetModelFamily } from "../../shared/model-capability.js";
 import { createMockPi } from "../../test-utils/pi-mock.js";
 
@@ -60,6 +61,7 @@ describe("integration: before_provider_request", () => {
 
   afterEach(() => {
     _resetEnabledSet();
+    _resetSubAgentRegistry();
     _resetModelFamily();
     delete process.env.PI_AGENT_DIR;
   });

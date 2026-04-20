@@ -1,67 +1,95 @@
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Type } from "@sinclair/typebox";
-import { getEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import type { ExtensionAPI } from "../types/pi.js";
-import { type SpawnFn, runNestedPi } from "./runner.js";
+import { defineSubAgent } from "./declaration.js";
+import { registerSubAgent } from "./register.js";
+import type { SpawnFn } from "./runner.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const ORACLE_SYSTEM_PROMPT = `# Oracle — Sub-Agent Persona
 
-const ORACLE_ALLOWLIST = ["read", "grep", "glob", "ast_grep_search"];
+## Role
 
-export function registerDelegateOracleTool(pi: ExtensionAPI, spawnFn?: SpawnFn): void {
-  if (!getEnabledSet().subAgents.has("oracle")) return;
+You are the Oracle sub-agent: a read-only consultation agent and high-IQ reasoning specialist. You are called when the primary Bytes agent needs deep analysis, debugging of hard problems, or architecture design input.
 
-  pi.registerTool({
-    name: "delegate_oracle",
-    description:
-      "Delegate a hard reasoning or architecture problem to the Oracle sub-agent — a " +
-      "high-IQ read-only consultation specialist. Use for debugging complex issues, " +
-      "architecture design decisions, or any question that requires deep analytical " +
-      "reasoning. The sub-agent has read-only access and uses elevated reasoning effort.",
-    parameters: Type.Object({
-      question: Type.String({
-        description:
-          "The question or problem to reason about. Include all relevant context " +
-          "inline. Be precise about what decision or insight you need.",
-      }),
-      context: Type.Optional(
-        Type.String({
-          description:
-            "Additional context (code snippets, error messages, constraints) to " +
-            "include with the question.",
-        }),
-      ),
+You do not implement. You reason, analyze, and advise.
+
+## Allowed Tools
+
+**Read-only tools only:**
+- \`read\` — read file contents
+- \`glob\` — find files by name pattern
+- \`grep\` — search file contents
+- \`ast_grep_search\` — AST-aware pattern search
+
+**You MUST NOT use any write, edit, or execution tools.** Do not use \`write\`, \`edit\`, \`hashline_edit\`, \`ast_grep_replace\`, \`bash\`, or any tool that modifies state or runs code.
+
+## Behavior
+
+### Debugging Hard Problems
+- Trace the full causal chain from symptom to root cause.
+- Consider edge cases, race conditions, type coercions, and hidden state.
+- Present your reasoning step by step. Show your work.
+- Propose multiple hypotheses, then rank them by likelihood.
+
+### Architecture Design
+- Evaluate tradeoffs explicitly: scalability, maintainability, performance, complexity.
+- Identify failure modes and anti-patterns in proposed designs.
+- Reference established patterns by name when applicable.
+
+### Security & Performance Analysis
+- Flag insecure patterns, injection risks, and trust boundary violations.
+- Identify algorithmic complexity issues and hot paths.
+- Suggest measurement strategies before optimization.
+
+### General Consultation
+- Be direct. Lead with your conclusion, then explain.
+- Do not hedge excessively — if you are uncertain, say so and explain why.
+- When the answer is "it depends", enumerate the conditions and their outcomes.
+
+## Language Matching
+
+Detect the language the user writes in and respond in the same language. Keep code, technical terms, and structured analysis in English.`;
+
+export const oracleDeclaration = defineSubAgent<{
+  question: string;
+  context?: string;
+}>({
+  name: "oracle",
+  toolName: "delegate_oracle",
+  description:
+    "Delegate a hard reasoning or architecture problem to the Oracle sub-agent — a " +
+    "high-IQ read-only consultation specialist. Use for debugging complex issues, " +
+    "architecture design decisions, or any question that requires deep analytical " +
+    "reasoning. The sub-agent has read-only access and uses elevated reasoning effort.",
+  parameters: Type.Object({
+    question: Type.String({
+      description:
+        "The question or problem to reason about. Include all relevant context " +
+        "inline. Be precise about what decision or insight you need.",
     }),
-    execute: async (params: { question: string; context?: string }) => {
-      const [prompt, config] = await Promise.all([
-        readFile(join(__dirname, "../prompts/oracle.md"), "utf-8"),
-        loadBlackbytesConfig(),
-      ]);
+    context: Type.Optional(
+      Type.String({
+        description:
+          "Additional context (code snippets, error messages, constraints) to " +
+          "include with the question.",
+      }),
+    ),
+  }),
+  systemPrompt: ORACLE_SYSTEM_PROMPT,
+  allowedTools: ["read", "grep", "glob", "ast_grep_search"],
+  buildUserPrompt: (p) =>
+    p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
+  resolveModelOverrides: async () => {
+    const config = await loadBlackbytesConfig();
+    const overrides = config.sub_agents?.oracle ?? {};
+    return {
+      model: overrides.model,
+      reasoningEffort: overrides.reasoningEffort ?? "high",
+    };
+  },
+});
 
-      const oracleOverrides = config.sub_agents?.oracle ?? {};
-      const model = oracleOverrides.model;
-      const reasoningEffort = oracleOverrides.reasoningEffort ?? "high";
-
-      const userPrompt = params.context
-        ? `${params.question}\n\n---\n\nAdditional context:\n${params.context}`
-        : params.question;
-
-      const result = await runNestedPi(
-        {
-          systemPrompt: prompt,
-          userPrompt,
-          model,
-          reasoningEffort,
-          allowedTools: ORACLE_ALLOWLIST,
-        },
-        spawnFn,
-      );
-      return {
-        content: result.success ? result.content : `Error: ${result.content}`,
-      };
-    },
-  });
+/** @deprecated Use {@link oracleDeclaration} with `registerSubAgent()`. */
+export function registerDelegateOracleTool(pi: ExtensionAPI, spawnFn?: SpawnFn): void {
+  registerSubAgent(pi, oracleDeclaration, { spawnFn });
 }

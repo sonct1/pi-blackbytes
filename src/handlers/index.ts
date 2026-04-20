@@ -1,13 +1,16 @@
 import { initEnabledSet } from "../config/enabled-set.js";
 // Handler functions wired to pi extension events.
 import { loadBlackbytesConfig } from "../config/loader.js";
+import { registerSubAgentMeta } from "../config/resource-metadata.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
 import { getModelFamily } from "../shared/model-capability.js";
-import { registerDelegateExploreTool } from "../sub-agents/explore.js";
-import { registerDelegateGeneralTool } from "../sub-agents/general.js";
-import { registerDelegateLibrarianTool } from "../sub-agents/librarian.js";
-import { registerDelegateOracleTool } from "../sub-agents/oracle.js";
+import { declarationToMeta } from "../sub-agents/declaration.js";
+import { exploreDeclaration } from "../sub-agents/explore.js";
+import { generalDeclaration } from "../sub-agents/general.js";
+import { librarianDeclaration } from "../sub-agents/librarian.js";
+import { oracleDeclaration } from "../sub-agents/oracle.js";
+import { registerSubAgent } from "../sub-agents/register.js";
 import { registerAstGrepReplaceTool } from "../tools/ast-grep/replace.js";
 import { registerAstGrepSearchTool } from "../tools/ast-grep/search.js";
 import { registerQueryDocsTool } from "../tools/context7/query.js";
@@ -24,27 +27,41 @@ import { mapReasoningEffort } from "./before-provider-request.js";
 import { registerCopilotHeader } from "./copilot-header.js";
 import { type ToolResultEvent, processToolResult } from "./tool-result.js";
 
+/** Builtin sub-agent declarations, assembled before enablement. */
+const BUILTIN_DECLARATIONS = [
+  exploreDeclaration,
+  oracleDeclaration,
+  librarianDeclaration,
+  generalDeclaration,
+];
 export async function handleSessionStart(pi: ExtensionAPI, ..._args: any[]): Promise<void> {
   const config = await loadBlackbytesConfig();
-  initEnabledSet(config);
+
+  // Assemble known agent names from declarations before enablement
+  const knownAgentNames = BUILTIN_DECLARATIONS.map((d) => d.name);
+  initEnabledSet(config, knownAgentNames);
+
   registerCopilotHeader(pi, config);
+
   // Local tools
   registerHashlineEditTool(pi);
   registerAstGrepSearchTool(pi);
   registerAstGrepReplaceTool(pi);
   registerGlobTool(pi);
   registerGrepTool(pi);
+
   // HTTP-based tool groups
   registerWebsearchSearchTool(pi);
   registerWebsearchFetchTool(pi);
   registerResolveLibraryIdTool(pi);
   registerQueryDocsTool(pi);
   registerGrepAppSearchTool(pi);
-  // Sub-agent delegates
-  registerDelegateExploreTool(pi);
-  registerDelegateOracleTool(pi);
-  registerDelegateLibrarianTool(pi);
-  registerDelegateGeneralTool(pi);
+
+  // Sub-agent delegates — declaration-driven registration
+  for (const decl of BUILTIN_DECLARATIONS) {
+    registerSubAgentMeta(declarationToMeta(decl));
+    registerSubAgent(pi, decl);
+  }
 }
 
 export async function handleBeforeAgentStart(..._args: any[]): Promise<void> {

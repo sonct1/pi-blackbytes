@@ -13,6 +13,7 @@ interface GrepParams {
   output_mode?: OutputMode;
   head_limit?: number;
   path?: string;
+  context?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +56,7 @@ async function* walkFiles(dir: string, include?: string): AsyncGenerator<string>
 async function nodeFallbackGrep(params: GrepParams): Promise<string> {
   const { readFile, stat } = await import("node:fs/promises");
   const { relative } = await import("node:path");
-  const { pattern, include, output_mode, head_limit, path: searchPath } = params;
+  const { pattern, include, output_mode, head_limit, path: searchPath, context } = params;
   const mode = output_mode ?? "files_with_matches";
   const dir = searchPath ?? process.cwd();
 
@@ -94,10 +95,43 @@ async function nodeFallbackGrep(params: GrepParams): Promise<string> {
       resultLines.push(`${relPath}:${matchingLines.length}`);
       lineCount++;
     } else {
-      for (const { lineNum, text } of matchingLines) {
-        if (exceeded()) break;
-        resultLines.push(`${relPath}:${lineNum}:${text}`);
-        lineCount++;
+      const useContext = context != null && context > 0;
+
+      if (useContext) {
+        if (resultLines.length > 0) {
+          resultLines.push("--");
+        }
+
+        const matchSet = new Set(matchingLines.map((m) => m.lineNum - 1));
+        const included = new Set<number>();
+        for (const idx of matchSet) {
+          for (
+            let j = Math.max(0, idx - context!);
+            j <= Math.min(lines.length - 1, idx + context!);
+            j++
+          ) {
+            included.add(j);
+          }
+        }
+
+        const sorted = Array.from(included).sort((a, b) => a - b);
+        let prevIdx = -2;
+        for (const idx of sorted) {
+          if (exceeded()) break;
+          if (prevIdx >= 0 && idx > prevIdx + 1) {
+            resultLines.push("--");
+          }
+          const sep = matchSet.has(idx) ? ":" : "-";
+          resultLines.push(`${relPath}${sep}${idx + 1}${sep}${lines[idx]}`);
+          lineCount++;
+          prevIdx = idx;
+        }
+      } else {
+        for (const { lineNum, text } of matchingLines) {
+          if (exceeded()) break;
+          resultLines.push(`${relPath}:${lineNum}:${text}`);
+          lineCount++;
+        }
       }
     }
   }
@@ -194,6 +228,52 @@ describe("grep tool - Node.js fallback", () => {
 
       const result = await nodeFallbackGrep({ pattern: "ZZZNOMATCH", path: dir });
       assert.equal(result, "");
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("context=1 includes adjacent lines around matches", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "grep-ctx-"));
+    try {
+      // line1, line2 (match), line3, line4 (match), line5
+      await writeFile(join(dir, "file.ts"), "before\nMATCH\nafter\nbefore2\nMATCH2\nafter2");
+
+      const result = await nodeFallbackGrep({
+        pattern: "MATCH",
+        path: dir,
+        output_mode: "content",
+        context: 1,
+      });
+
+      // Should include context lines (rg-style with - separator)
+      assert.ok(result.includes("file.ts-1-before"), `missing before context: ${result}`);
+      assert.ok(result.includes("file.ts:2:MATCH"), `missing match line: ${result}`);
+      assert.ok(result.includes("file.ts-3-after"), `missing after context: ${result}`);
+      assert.ok(result.includes("file.ts:5:MATCH2"), `missing second match: ${result}`);
+    } finally {
+      await rm(dir, { recursive: true });
+    }
+  });
+
+  it("context=1 inserts -- separator between non-adjacent groups", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "grep-ctx-sep-"));
+    try {
+      // match on line 1, next match far away on line 5 — gap at line 3
+      await writeFile(join(dir, "file.ts"), "MATCH\nctx\ngap\nctx2\nMATCH2");
+
+      const result = await nodeFallbackGrep({
+        pattern: "MATCH",
+        path: dir,
+        output_mode: "content",
+        context: 1,
+      });
+
+      // Groups: [line1, line2] and [line4, line5] with a gap at line3 → should have --
+      assert.ok(
+        result.includes("--"),
+        `expected -- separator between non-adjacent groups: ${result}`,
+      );
     } finally {
       await rm(dir, { recursive: true });
     }

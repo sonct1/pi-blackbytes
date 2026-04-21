@@ -13,6 +13,7 @@ interface GrepParams {
   output_mode?: OutputMode;
   head_limit?: number;
   path?: string;
+  context?: number; // lines before/after each match (content mode only)
 }
 
 // ---------------------------------------------------------------------------
@@ -20,7 +21,7 @@ interface GrepParams {
 // ---------------------------------------------------------------------------
 
 function buildRgArgs(params: GrepParams): string[] {
-  const { pattern, include, output_mode, head_limit, path: searchPath } = params;
+  const { pattern, include, output_mode, head_limit, path: searchPath, context } = params;
   const mode = output_mode ?? "files_with_matches";
   const args: string[] = [];
 
@@ -31,6 +32,11 @@ function buildRgArgs(params: GrepParams): string[] {
     args.push("--count");
   }
   // "content" mode is the default for rg (shows matching lines)
+
+  // Context lines — only meaningful for content mode
+  if (context != null && context > 0 && mode === "content") {
+    args.push("--context", String(context));
+  }
 
   if (include) {
     args.push("--glob", include);
@@ -107,7 +113,7 @@ async function* walkFiles(dir: string, include?: string): AsyncGenerator<string>
 }
 
 async function nodeFallbackGrep(params: GrepParams): Promise<string> {
-  const { pattern, include, output_mode, head_limit, path: searchPath } = params;
+  const { pattern, include, output_mode, head_limit, path: searchPath, context } = params;
   const mode = output_mode ?? "files_with_matches";
   const dir = searchPath ?? process.cwd();
 
@@ -154,10 +160,46 @@ async function nodeFallbackGrep(params: GrepParams): Promise<string> {
       lineCount++;
     } else {
       // content mode
-      for (const { lineNum, text } of matchingLines) {
-        if (exceeded()) break;
-        resultLines.push(`${relPath}:${lineNum}:${text}`);
-        lineCount++;
+      const useContext = context != null && context > 0;
+
+      if (useContext) {
+        // Add -- separator between files/groups
+        if (resultLines.length > 0) {
+          resultLines.push("--");
+        }
+
+        const matchSet = new Set(matchingLines.map((m) => m.lineNum - 1));
+        // Expand each match index by ±context
+        const included = new Set<number>();
+        for (const idx of matchSet) {
+          for (
+            let j = Math.max(0, idx - context!);
+            j <= Math.min(lines.length - 1, idx + context!);
+            j++
+          ) {
+            included.add(j);
+          }
+        }
+
+        const sorted = Array.from(included).sort((a, b) => a - b);
+        let prevIdx = -2;
+        for (const idx of sorted) {
+          if (exceeded()) break;
+          // Gap between non-contiguous context groups within the same file
+          if (prevIdx >= 0 && idx > prevIdx + 1) {
+            resultLines.push("--");
+          }
+          const sep = matchSet.has(idx) ? ":" : "-";
+          resultLines.push(`${relPath}${sep}${idx + 1}${sep}${lines[idx]}`);
+          lineCount++;
+          prevIdx = idx;
+        }
+      } else {
+        for (const { lineNum, text } of matchingLines) {
+          if (exceeded()) break;
+          resultLines.push(`${relPath}:${lineNum}:${text}`);
+          lineCount++;
+        }
       }
     }
   }
@@ -208,7 +250,7 @@ export function registerGrepTool(pi: ExtensionAPI): void {
   registerTool(pi, "grep", {
     name: "grep",
     description:
-      "Search file contents using regular expressions. Uses ripgrep (rg) when available for speed, falls back to Node.js implementation. Supports content, files_with_matches, and count output modes.",
+      "Search file contents using regular expressions. Uses ripgrep (rg) when available for speed, falls back to Node.js implementation. Supports content, files_with_matches, and count output modes. Use context to show surrounding lines.",
     parameters: Type.Object({
       pattern: Type.String({
         description: "Regular expression pattern for searching",
@@ -226,6 +268,13 @@ export function registerGrepTool(pi: ExtensionAPI): void {
               'Output mode: "content" shows matching lines, "files_with_matches" shows file paths only, "count" shows match counts per file. Defaults to "files_with_matches".',
           },
         ),
+      ),
+      context: Type.Optional(
+        Type.Number({
+          description:
+            "Number of lines to show before and after each match. Only applies to content mode. Produces rg-style output with '--' separators between non-adjacent groups.",
+          minimum: 0,
+        }),
       ),
       head_limit: Type.Optional(
         Type.Number({

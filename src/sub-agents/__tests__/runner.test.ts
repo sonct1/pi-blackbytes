@@ -248,4 +248,80 @@ describe("runNestedPi", () => {
     assert.equal(result.content, "Nested Pi failed");
     assert.match(result.details ?? "", /ENOENT/);
   });
+
+  it("spawn args always include --no-session and --no-context-files", async () => {
+    let capturedArgs: string[] | undefined;
+
+    const fakeChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
+    const spawnFn = ((_cmd: string, args: string[]) => {
+      capturedArgs = args;
+      return fakeChild;
+    }) as unknown as SpawnFn;
+
+    await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      spawnFn,
+    );
+
+    assert.ok(capturedArgs !== undefined);
+    assert.ok(capturedArgs!.includes("--no-session"), "should include --no-session");
+    assert.ok(capturedArgs!.includes("--no-context-files"), "should include --no-context-files");
+  });
+
+  it("--thinking flag is passed when reasoningEffort is set", async () => {
+    let capturedArgs: string[] | undefined;
+
+    const fakeChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
+    const spawnFn = ((_cmd: string, args: string[]) => {
+      capturedArgs = args;
+      return fakeChild;
+    }) as unknown as SpawnFn;
+
+    await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        reasoningEffort: "high",
+      },
+      spawnFn,
+    );
+
+    const thinkingIdx = capturedArgs!.indexOf("--thinking");
+    assert.ok(thinkingIdx !== -1, "--thinking flag should be present");
+    assert.equal(capturedArgs![thinkingIdx + 1], "high", "--thinking value should be 'high'");
+    // Must NOT set it via env var anymore
+    assert.equal(
+      (capturedArgs as string[]).filter((a) => a === "BLACKBYTES_REASONING_EFFORT").length,
+      0,
+    );
+  });
+
+  it("--thinking flag is absent when reasoningEffort is not set", async () => {
+    let capturedArgs: string[] | undefined;
+
+    const fakeChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
+    const spawnFn = ((_cmd: string, args: string[]) => {
+      capturedArgs = args;
+      return fakeChild;
+    }) as unknown as SpawnFn;
+
+    await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      spawnFn,
+    );
+
+    assert.ok(
+      !capturedArgs!.includes("--thinking"),
+      "--thinking should not be present when reasoningEffort is undefined",
+    );
+  });
 });

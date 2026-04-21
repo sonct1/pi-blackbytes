@@ -60,7 +60,14 @@ export async function runNestedPi(
     onUpdate,
   } = opts;
 
-  const args: string[] = ["-p", userPrompt, "--system-prompt", systemPrompt];
+  const args: string[] = [
+    "-p",
+    userPrompt,
+    "--system-prompt",
+    systemPrompt,
+    "--no-session",
+    "--no-context-files",
+  ];
 
   if (model) {
     args.push("--model", model);
@@ -72,7 +79,7 @@ export async function runNestedPi(
 
   const safeEnv = buildSafeEnv();
   if (reasoningEffort) {
-    safeEnv.BLACKBYTES_REASONING_EFFORT = reasoningEffort;
+    args.push("--thinking", reasoningEffort);
   }
 
   return new Promise<DelegateResult>((resolve) => {

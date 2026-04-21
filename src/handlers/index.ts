@@ -120,7 +120,8 @@ export async function handleBeforeProviderRequest(
   const payload = event.payload as Record<string, unknown> | null | undefined;
   if (!payload) return;
   const family = getModelFamily();
-  // Env var fallback allows sub-agents to inherit reasoning effort from parent
+  // Shell env override for the host session's reasoning effort.
+  // Sub-agents receive reasoning effort via --thinking CLI flag instead (see runner.ts).
   const reasoningEffort = process.env.BLACKBYTES_REASONING_EFFORT;
   mapReasoningEffort(payload, reasoningEffort, family);
 }

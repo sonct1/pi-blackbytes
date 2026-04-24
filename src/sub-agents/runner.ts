@@ -21,6 +21,63 @@ const SAFE_ENV_VARS = [
   "NODE_ENV",
 ] as const;
 
+const MAX_STREAM_CHARS = 8_192;
+const MAX_DISPLAY_DETAIL_CHARS = 6_144;
+const DEFAULT_KILL_GRACE_MS = 100;
+const TRUNCATION_MARKER = "\n[... truncated ...]\n";
+
+function appendBounded(current: string, chunk: string, maxChars = MAX_STREAM_CHARS): string {
+  const combined = current + chunk;
+  if (combined.length <= maxChars) return combined;
+
+  const keepChars = maxChars - TRUNCATION_MARKER.length;
+  const headChars = Math.floor(keepChars / 2);
+  const tailChars = keepChars - headChars;
+  return combined.slice(0, headChars) + TRUNCATION_MARKER + combined.slice(-tailChars);
+}
+
+function truncateMiddle(text: string, maxChars = MAX_DISPLAY_DETAIL_CHARS): string {
+  if (text.length <= maxChars) return text;
+
+  const keepChars = maxChars - TRUNCATION_MARKER.length;
+  const headChars = Math.floor(keepChars / 2);
+  const tailChars = keepChars - headChars;
+  return text.slice(0, headChars) + TRUNCATION_MARKER + text.slice(-tailChars);
+}
+
+function redactFailureText(text: string): string {
+  return text
+    .replace(
+      /(\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|KEY)[A-Z0-9_]*\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'",}]+)/gi,
+      "$1[REDACTED]",
+    )
+    .replace(
+      /((?:"[^"]*(?:api[_-]?key|token|secret|password|credential|key)[^"]*"|'[^']*(?:api[_-]?key|token|secret|password|credential|key)[^']*'|\b[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password|credential|key)[A-Za-z0-9_-]*\b)\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
+      "$1[REDACTED]",
+    )
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+\-/=]+/gi, "$1[REDACTED]");
+}
+
+function classifyFailure(
+  details: string | undefined,
+  fallback: NonNullable<DelegateResult["failureKind"]>,
+) {
+  const text = details ?? "";
+  if (/unknown tool|invalid tool|tool.*not found/i.test(text)) return "invalid_tool_allowlist";
+  if (/rate limit|model.*(not found|unavailable)|provider|api key|authentication/i.test(text)) {
+    return "provider_or_model_unavailable";
+  }
+  if (/unknown option|usage:/i.test(text)) return "cli_usage_error";
+  return fallback;
+}
+
+export function formatDelegateFailure(result: DelegateResult): string {
+  const details = result.details ? truncateMiddle(redactFailureText(result.details)) : undefined;
+  const kind = result.failureKind ? ` (${result.failureKind})` : "";
+  if (!details) return `Error: ${result.content}${kind}`;
+  return `Error: ${result.content}${kind}\nDetails:\n${details}`;
+}
+
 function buildSafeEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of SAFE_ENV_VARS) {
@@ -44,6 +101,7 @@ export async function runNestedPi(
     return {
       success: false,
       content: "Nested Pi invocation refused: recursion depth limit reached (PI_NESTED_DEPTH >= 1)",
+      failureKind: "recursion_refused",
     };
   }
 
@@ -56,9 +114,17 @@ export async function runNestedPi(
     cwd,
     signal,
     timeoutMs = 300_000,
+    killGraceMs = DEFAULT_KILL_GRACE_MS,
     onUpdate,
   } = opts;
 
+  if (signal?.aborted) {
+    return {
+      success: false,
+      content: "Nested Pi cancelled",
+      failureKind: "cancelled",
+    };
+  }
   const args: string[] = [
     "-p",
     userPrompt,
@@ -83,29 +149,44 @@ export async function runNestedPi(
 
   return new Promise<DelegateResult>((resolve) => {
     let settled = false;
-    let timedOut = false;
-    let cancelled = false;
-
-    const child = spawnFn("pi", args, {
-      cwd: cwd ?? process.cwd(),
-      env: safeEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let terminationReason: "timed_out" | "cancelled" | undefined;
+    let terminationRequested = false;
+    let killGraceHandle: ReturnType<typeof setTimeout> | undefined;
+    let child: ReturnType<SpawnFn>;
 
     let stdout = "";
     let stderr = "";
 
+    const makeTerminationResult = (reason: "timed_out" | "cancelled"): DelegateResult => ({
+      success: false,
+      content: reason === "timed_out" ? "Nested Pi timed out" : "Nested Pi cancelled",
+      details: stderr || undefined,
+      failureKind: reason,
+    });
+
+    const requestTermination = (reason: "timed_out" | "cancelled") => {
+      terminationReason ??= reason;
+      if (terminationRequested) return;
+      terminationRequested = true;
+      child.kill("SIGTERM");
+      killGraceHandle = setTimeout(() => {
+        if (settled) return;
+        child.kill("SIGKILL");
+        finish(makeTerminationResult(terminationReason ?? reason));
+      }, killGraceMs);
+    };
+
     // Manual timeout timer so we can clear it when done (avoids pending timer issues)
     const timeoutHandle = setTimeout(() => {
       if (settled) return;
-      timedOut = true;
-      child.kill("SIGTERM");
+      requestTermination("timed_out");
     }, timeoutMs);
 
     const finish = (result: DelegateResult) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutHandle);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (killGraceHandle) clearTimeout(killGraceHandle);
       if (signal) {
         signal.removeEventListener("abort", callerAbortHandler);
       }
@@ -114,47 +195,56 @@ export async function runNestedPi(
 
     const callerAbortHandler = () => {
       if (settled) return;
-      cancelled = true;
-      child.kill("SIGTERM");
+      requestTermination("cancelled");
     };
 
     if (signal) {
-      if (signal.aborted) {
-        // Already aborted before we started
-        clearTimeout(timeoutHandle);
-        child.kill("SIGTERM");
-        cancelled = true;
-      } else {
-        signal.addEventListener("abort", callerAbortHandler, { once: true });
-      }
+      signal.addEventListener("abort", callerAbortHandler, { once: true });
+    }
+
+    try {
+      child = spawnFn("pi", args, {
+        cwd: cwd ?? process.cwd(),
+        env: safeEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      finish({
+        success: false,
+        content: "Nested Pi failed",
+        details: err instanceof Error ? err.message : String(err),
+        failureKind: "spawn_error",
+      });
+      return;
+    }
+
+    if (!child.stdout || !child.stderr) {
+      finish({
+        success: false,
+        content: "Nested Pi failed",
+        details: "Nested Pi process did not expose stdout/stderr streams",
+        failureKind: "spawn_error",
+      });
+      return;
+    }
+
+    if (signal?.aborted) {
+      requestTermination("cancelled");
     }
 
     child.stdout!.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
-      stdout += text;
+      stdout = appendBounded(stdout, text);
       onUpdate?.(text);
     });
 
     child.stderr!.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
+      stderr = appendBounded(stderr, chunk.toString());
     });
 
     child.on("close", (_code) => {
-      if (timedOut) {
-        finish({
-          success: false,
-          content: "Nested Pi timed out",
-          details: stderr || undefined,
-        });
-        return;
-      }
-
-      if (cancelled || (signal?.aborted ?? false)) {
-        finish({
-          success: false,
-          content: "Nested Pi cancelled",
-          details: stderr || undefined,
-        });
+      if (terminationReason) {
+        finish(makeTerminationResult(terminationReason));
         return;
       }
 
@@ -165,6 +255,7 @@ export async function runNestedPi(
           success: false,
           content: "Nested Pi failed",
           details: stderr || undefined,
+          failureKind: classifyFailure(stderr, "failed"),
         });
       }
     });
@@ -174,6 +265,7 @@ export async function runNestedPi(
         success: false,
         content: "Nested Pi failed",
         details: err.message,
+        failureKind: "spawn_error",
       });
     });
   });

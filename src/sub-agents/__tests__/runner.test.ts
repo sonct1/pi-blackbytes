@@ -4,6 +4,25 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import type { SpawnFn } from "../runner.js";
 import { runNestedPi } from "../runner.js";
 
+const PI_CLI_COMPATIBILITY_EVIDENCE = {
+  installedCliVersion: "0.67.6",
+  inspectedPackageVersion: "@mariozechner/pi-coding-agent@0.67.68",
+  acceptedFlags: [
+    "-p",
+    "--system-prompt",
+    "--no-session",
+    "--no-context-files",
+    "--model",
+    "--tools",
+    "--thinking",
+  ],
+  acceptedBuiltinTools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
+  unknownToolBehavior: "warning-and-drop",
+  temperatureFlagSupport: "unsupported",
+  cwdContract:
+    "registerSubAgent forwards ExtensionContext.cwd; runNestedPi falls back to process.cwd().",
+} as const;
+
 // Helper: create a fake ChildProcess-like object
 function makeFakeChild(options: {
   stdoutData?: string;
@@ -78,6 +97,7 @@ describe("runNestedPi", () => {
 
     assert.equal(result.success, false);
     assert.match(result.content, /recursion depth limit/);
+    assert.equal(result.failureKind, "recursion_refused");
   });
 
   it("successful execution returns content from stdout", async () => {
@@ -116,6 +136,7 @@ describe("runNestedPi", () => {
     assert.equal(result.success, false);
     assert.equal(result.content, "Nested Pi failed");
     assert.equal(result.details, "Something went wrong");
+    assert.equal(result.failureKind, "failed");
   });
 
   it("timeout returns failure and kills child", async () => {
@@ -151,6 +172,7 @@ describe("runNestedPi", () => {
     assert.equal(result.success, false);
     assert.match(result.content, /timed out/);
     assert.equal(child.killed, true);
+    assert.equal(result.failureKind, "timed_out");
   });
 
   it("cancellation via AbortSignal kills child process", async () => {
@@ -193,6 +215,7 @@ describe("runNestedPi", () => {
     assert.equal(result.success, false);
     assert.match(result.content, /cancelled|timed out/);
     assert.equal(child.killed, true);
+    assert.equal(result.failureKind, "cancelled");
   });
 
   it("env filtering only passes allowlisted vars", async () => {
@@ -228,6 +251,26 @@ describe("runNestedPi", () => {
     assert.equal(capturedEnv!.PATH, "/usr/bin:/bin");
   });
 
+  it("records deterministic Pi CLI compatibility evidence", () => {
+    assert.equal(PI_CLI_COMPATIBILITY_EVIDENCE.installedCliVersion, "0.67.6");
+    assert.equal(
+      PI_CLI_COMPATIBILITY_EVIDENCE.inspectedPackageVersion,
+      "@mariozechner/pi-coding-agent@0.67.68",
+    );
+    assert.deepEqual(PI_CLI_COMPATIBILITY_EVIDENCE.acceptedBuiltinTools, [
+      "read",
+      "bash",
+      "edit",
+      "write",
+      "grep",
+      "find",
+      "ls",
+    ]);
+    assert.equal(PI_CLI_COMPATIBILITY_EVIDENCE.unknownToolBehavior, "warning-and-drop");
+    assert.equal(PI_CLI_COMPATIBILITY_EVIDENCE.temperatureFlagSupport, "unsupported");
+    assert.match(PI_CLI_COMPATIBILITY_EVIDENCE.cwdContract, /ExtensionContext\.cwd/);
+  });
+
   it("spawn error returns failure", async () => {
     const fakeChild = makeFakeChild({
       emitError: new Error("spawn ENOENT"),
@@ -247,6 +290,208 @@ describe("runNestedPi", () => {
     assert.equal(result.success, false);
     assert.equal(result.content, "Nested Pi failed");
     assert.match(result.details ?? "", /ENOENT/);
+    assert.equal(result.failureKind, "spawn_error");
+  });
+
+  it("returns spawn_error when spawn throws synchronously", async () => {
+    const spawnFn = (() => {
+      throw new Error("spawn EACCES");
+    }) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.content, "Nested Pi failed");
+    assert.match(result.details ?? "", /EACCES/);
+    assert.equal(result.failureKind, "spawn_error");
+  });
+
+  it("does not spawn when signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let spawned = false;
+    const spawnFn = (() => {
+      spawned = true;
+      return makeFakeChild({ stdoutData: "unexpected", exitCode: 0 });
+    }) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        signal: controller.signal,
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.failureKind, "cancelled");
+    assert.equal(spawned, false);
+  });
+
+  it("bounds high-volume child output while preserving head and tail", async () => {
+    const hugeStdout = `stdout-head-${"x".repeat(9_000)}-stdout-tail`;
+    const hugeStderr = `stderr-head-${"y".repeat(9_000)}-stderr-tail`;
+    const fakeChild = makeFakeChild({
+      stdoutData: hugeStdout,
+      stderrData: hugeStderr,
+      exitCode: 1,
+    });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, false);
+    assert.ok((result.details?.length ?? 0) <= 8_192);
+    assert.match(result.details ?? "", /stderr-head/);
+    assert.match(result.details ?? "", /stderr-tail/);
+    assert.match(result.details ?? "", /truncated/);
+  });
+
+  it("classifies CLI usage, invalid tool allowlist, and provider/model failures", async () => {
+    const cases = [
+      { stderrData: "Error: Unknown option: --temperature", kind: "cli_usage_error" },
+      { stderrData: "Warning: Unknown tool nope", kind: "invalid_tool_allowlist" },
+      { stderrData: "Unknown tool nope\nUsage: pi [options]", kind: "invalid_tool_allowlist" },
+      { stderrData: "Provider rejected unavailable model", kind: "provider_or_model_unavailable" },
+    ] as const;
+
+    for (const testCase of cases) {
+      const fakeChild = makeFakeChild({ stderrData: testCase.stderrData, exitCode: 1 });
+      const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+      const result = await runNestedPi(
+        {
+          systemPrompt: "You are helpful",
+          userPrompt: "Hello",
+          allowedTools: [],
+        },
+        spawnFn,
+      );
+
+      assert.equal(result.failureKind, testCase.kind);
+    }
+  });
+
+  it("escalates timeout termination to SIGKILL after grace period", async () => {
+    const signals: string[] = [];
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+      stdin: null;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = null;
+    child.kill = (signal?: string) => {
+      signals.push(signal ?? "");
+      if (signal === "SIGKILL") {
+        process.nextTick(() => child.emit("close", null));
+      }
+    };
+    const spawnFn = (() => child) as unknown as SpawnFn;
+    const startedAt = Date.now();
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        timeoutMs: 10,
+        killGraceMs: 10,
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.failureKind, "timed_out");
+    assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+    assert.ok(Date.now() - startedAt < 200);
+  });
+
+  it("resolves timeout after SIGKILL even when close never arrives", async () => {
+    const signals: string[] = [];
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+      stdin: null;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = null;
+    child.kill = (signal?: string) => {
+      signals.push(signal ?? "");
+    };
+    const spawnFn = (() => child) as unknown as SpawnFn;
+    const startedAt = Date.now();
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        timeoutMs: 10,
+        killGraceMs: 10,
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.failureKind, "timed_out");
+    assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+    assert.ok(Date.now() - startedAt < 200);
+  });
+
+  it("escalates cancellation termination to SIGKILL after grace period", async () => {
+    const signals: string[] = [];
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+      stdin: null;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = null;
+    child.kill = (signal?: string) => {
+      signals.push(signal ?? "");
+      if (signal === "SIGKILL") {
+        process.nextTick(() => child.emit("close", null));
+      }
+    };
+    const spawnFn = (() => child) as unknown as SpawnFn;
+    const controller = new AbortController();
+
+    const resultPromise = runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        signal: controller.signal,
+        timeoutMs: 30_000,
+        killGraceMs: 10,
+      },
+      spawnFn,
+    );
+    controller.abort();
+    const result = await resultPromise;
+
+    assert.equal(result.failureKind, "cancelled");
+    assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
   });
 
   it("spawn args always include --no-session and --no-context-files", async () => {
@@ -270,6 +515,68 @@ describe("runNestedPi", () => {
     assert.ok(capturedArgs !== undefined);
     assert.ok(capturedArgs!.includes("--no-session"), "should include --no-session");
     assert.ok(capturedArgs!.includes("--no-context-files"), "should include --no-context-files");
+  });
+
+  it("serializes nested tools and omits unsupported temperature flag", async () => {
+    let capturedArgs: string[] | undefined;
+
+    const fakeChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
+    const spawnFn = ((_cmd: string, args: string[]) => {
+      capturedArgs = args;
+      return fakeChild;
+    }) as unknown as SpawnFn;
+
+    await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: ["read", "grep", "find", "ls"],
+      },
+      spawnFn,
+    );
+
+    const toolsIdx = capturedArgs!.indexOf("--tools");
+    assert.ok(toolsIdx !== -1, "--tools flag should be present");
+    assert.equal(capturedArgs![toolsIdx + 1], "read,grep,find,ls");
+    assert.ok(!capturedArgs!.includes("--temperature"), "--temperature must not be passed");
+  });
+
+  it("uses explicit cwd and falls back to process.cwd()", async () => {
+    const cwdBefore = process.cwd();
+    const capturedCwds: string[] = [];
+
+    const explicitChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
+    const explicitSpawnFn = ((_cmd: string, _args: string[], opts: { cwd?: string }) => {
+      capturedCwds.push(opts.cwd ?? "");
+      return explicitChild;
+    }) as unknown as SpawnFn;
+
+    await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        cwd: "/tmp/nested-pi-workspace",
+      },
+      explicitSpawnFn,
+    );
+
+    const fallbackChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
+    const fallbackSpawnFn = ((_cmd: string, _args: string[], opts: { cwd?: string }) => {
+      capturedCwds.push(opts.cwd ?? "");
+      return fallbackChild;
+    }) as unknown as SpawnFn;
+
+    await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      fallbackSpawnFn,
+    );
+
+    assert.deepEqual(capturedCwds, ["/tmp/nested-pi-workspace", cwdBefore]);
   });
 
   it("--thinking flag is passed when reasoningEffort is set", async () => {

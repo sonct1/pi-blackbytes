@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
 import type { SubAgentDeclaration } from "./declaration.js";
-import { type SpawnFn, runNestedPi } from "./runner.js";
+import { type SpawnFn, formatDelegateFailure, runNestedPi } from "./runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,7 +34,13 @@ export function registerSubAgent(
     name: declaration.toolName,
     description: declaration.description,
     parameters: declaration.parameters,
-    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
+    execute: async (
+      _toolCallId: string,
+      params: Record<string, unknown>,
+      signal?: AbortSignal,
+      _onUpdate?: unknown,
+      ctx?: { cwd?: string },
+    ) => {
       const systemPrompt =
         declaration.systemPrompt ??
         (declaration.systemPromptPath
@@ -63,11 +69,12 @@ export function registerSubAgent(
           model: overrides.model,
           reasoningEffort: overrides.reasoningEffort,
           allowedTools,
+          cwd: ctx?.cwd,
+          signal,
         },
         spawnFn,
       );
-
-      const text = result.success ? result.content : `Error: ${result.content}`;
+      const text = result.success ? result.content : formatDelegateFailure(result);
       return {
         content: [{ type: "text" as const, text }],
       };

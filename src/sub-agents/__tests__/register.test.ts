@@ -20,7 +20,11 @@ const defaultConfig: BlackbytesConfig = {
   copilot_initiator_header: true,
 };
 
-function makeFakeChild(opts: { stdoutData?: string; exitCode?: number | null }) {
+function makeFakeChild(opts: {
+  stdoutData?: string;
+  stderrData?: string;
+  exitCode?: number | null;
+}) {
   const child = new EventEmitter() as EventEmitter & {
     stdout: EventEmitter;
     stderr: EventEmitter;
@@ -41,6 +45,9 @@ function makeFakeChild(opts: { stdoutData?: string; exitCode?: number | null }) 
     if (opts.stdoutData) {
       child.stdout.emit("data", Buffer.from(opts.stdoutData));
     }
+    if (opts.stderrData) {
+      child.stderr.emit("data", Buffer.from(opts.stderrData));
+    }
     child.emit("close", opts.exitCode ?? 0);
   }, 10);
 
@@ -48,11 +55,11 @@ function makeFakeChild(opts: { stdoutData?: string; exitCode?: number | null }) 
 }
 
 function makeCapturingSpawnFn(
-  opts: { stdoutData?: string; exitCode?: number },
-  onSpawn?: (args: string[]) => void,
+  opts: { stdoutData?: string; stderrData?: string; exitCode?: number },
+  onSpawn?: (args: string[], options: { cwd?: string }) => void,
 ): SpawnFn {
-  return ((_cmd: string, args: string[]) => {
-    onSpawn?.(args);
+  return ((_cmd: string, args: string[], options: { cwd?: string }) => {
+    onSpawn?.(args, options);
     return makeFakeChild(opts);
   }) as unknown as SpawnFn;
 }
@@ -64,11 +71,30 @@ function extractAllowedTools(args: string[]): string[] {
 }
 
 function makeFakePi(): {
-  registeredTools: Map<string, { execute: (toolCallId: string, p: any) => Promise<any> }>;
+  registeredTools: Map<
+    string,
+    {
+      execute: (
+        toolCallId: string,
+        p: any,
+        signal?: AbortSignal,
+        onUpdate?: unknown,
+        ctx?: { cwd?: string },
+      ) => Promise<any>;
+    }
+  >;
 } & ExtensionAPI {
   const registeredTools = new Map<
     string,
-    { execute: (toolCallId: string, p: any) => Promise<any> }
+    {
+      execute: (
+        toolCallId: string,
+        p: any,
+        signal?: AbortSignal,
+        onUpdate?: unknown,
+        ctx?: { cwd?: string },
+      ) => Promise<any>;
+    }
   >();
   return {
     registeredTools,
@@ -79,7 +105,18 @@ function makeFakePi(): {
     registerProvider: () => {},
     registerCommand: () => {},
   } as unknown as {
-    registeredTools: Map<string, { execute: (toolCallId: string, p: any) => Promise<any> }>;
+    registeredTools: Map<
+      string,
+      {
+        execute: (
+          toolCallId: string,
+          p: any,
+          signal?: AbortSignal,
+          onUpdate?: unknown,
+          ctx?: { cwd?: string },
+        ) => Promise<any>;
+      }
+    >;
   } & ExtensionAPI;
 }
 
@@ -167,6 +204,24 @@ describe("registerSubAgent", () => {
 
     const tools = extractAllowedTools(capturedArgs);
     assert.deepEqual(tools, ["read", "grep", "glob", "ast_search"]);
+  });
+
+  it("passes tool execution cwd to nested Pi", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    let capturedCwd: string | undefined;
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (_args, options) => {
+      capturedCwd = options.cwd;
+    });
+
+    registerSubAgent(pi, testDecl, { spawnFn });
+
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("test-call", { question: "test" }, undefined, undefined, {
+      cwd: "/tmp/host-workspace",
+    });
+
+    assert.equal(capturedCwd, "/tmp/host-workspace");
   });
 
   it("resolves dynamic allowedTools at execution time", async () => {
@@ -268,6 +323,28 @@ describe("registerSubAgent", () => {
     const result = await tool.execute("test-call", { question: "test" });
 
     assert.match(result.content[0].text, /^Error:/);
+  });
+
+  it("returns formatted failure details from runNestedPi failure", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    const spawnFn = makeCapturingSpawnFn({
+      stderrData:
+        'OPENAI_API_KEY=secret-token\nTOKEN=\'quoted-secret\'\n{"api_key": "json-secret"}\nUnknown tool delegate_general',
+      exitCode: 1,
+    });
+
+    registerSubAgent(pi, testDecl, { spawnFn });
+
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    const result = await tool.execute("test-call", { question: "test" });
+
+    assert.match(result.content[0].text, /^Error: Nested Pi failed \(invalid_tool_allowlist\)/);
+    assert.match(result.content[0].text, /Details:/);
+    assert.match(result.content[0].text, /OPENAI_API_KEY=\[REDACTED\]/);
+    assert.doesNotMatch(result.content[0].text, /secret-token/);
+    assert.doesNotMatch(result.content[0].text, /quoted-secret/);
+    assert.doesNotMatch(result.content[0].text, /json-secret/);
   });
 
   it("returns success content on runNestedPi success", async () => {

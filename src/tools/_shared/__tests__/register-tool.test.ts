@@ -121,4 +121,78 @@ describe("registerTool", () => {
     });
     assert.equal(registered.length, 0);
   });
+
+  it("passes through promptSnippet to pi.registerTool", () => {
+    initEnabledSet(makeConfig({}));
+
+    const registered: any[] = [];
+    const mockPi = {
+      on() {},
+      registerProvider() {},
+      registerCommand() {},
+      registerTool(def: any) {
+        registered.push(def);
+      },
+    };
+
+    const definition = {
+      name: "glob",
+      description: "Fast file matching",
+      promptSnippet: "Fast file pattern matching with glob patterns like **/*.ts",
+    };
+    registerTool(mockPi as unknown as ExtensionAPI, "glob", definition);
+    assert.equal(registered.length, 1);
+    assert.equal(registered[0].promptSnippet, definition.promptSnippet);
+  });
+
+  it("passes through promptGuidelines to pi.registerTool", () => {
+    initEnabledSet(makeConfig({}));
+
+    const registered: any[] = [];
+    const mockPi = {
+      on() {},
+      registerProvider() {},
+      registerCommand() {},
+      registerTool(def: any) {
+        registered.push(def);
+      },
+    };
+
+    const guidelines = [
+      "Prefer hashline_edit over edit for all file modifications when available.",
+      "Always read the target file first to obtain LINE#ID anchors before editing.",
+    ];
+    const definition = {
+      name: "hashline_edit",
+      description: "Edit files",
+      promptSnippet: "Edit files using LINE#ID anchors",
+      promptGuidelines: guidelines,
+    };
+    registerTool(mockPi as unknown as ExtensionAPI, "hashline_edit", definition);
+    assert.equal(registered.length, 1);
+    assert.deepEqual(registered[0].promptGuidelines, guidelines);
+  });
+
+  it("preserves promptSnippet when adapting params-only executors", async () => {
+    initEnabledSet(makeConfig({}));
+
+    const registered: any[] = [];
+    const mockPi = {
+      on() {},
+      registerProvider() {},
+      registerCommand() {},
+      registerTool(def: any) {
+        registered.push(def);
+      },
+    };
+
+    registerTool(mockPi as unknown as ExtensionAPI, "web_fetch", {
+      name: "web_fetch",
+      promptSnippet: "Fetch a URL and return content",
+      execute: async (params: unknown) => ({ content: [{ type: "text", text: "ok" }] }),
+    });
+
+    assert.equal(registered.length, 1);
+    assert.equal(registered[0].promptSnippet, "Fetch a URL and return content");
+  });
 });

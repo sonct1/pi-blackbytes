@@ -92,6 +92,7 @@ export async function executeQueryDocs(
 export function registerQueryDocsTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.DOCS_QUERY, {
     name: TOOL_NAMES.DOCS_QUERY,
+    promptSnippet: "Query up-to-date documentation and code examples from Context7",
     description:
       "Retrieves up-to-date documentation and code examples from Context7 for a library. Requires a Context7-compatible library ID in /org/project format — use docs_resolve first if you don't have the ID.",
     parameters: Type.Object({

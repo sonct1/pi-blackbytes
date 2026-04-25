@@ -38,6 +38,7 @@ function formatMatches(matches: AstGrepMatch[]): string {
 export function registerAstGrepSearchTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.AST_SEARCH, {
     name: TOOL_NAMES.AST_SEARCH,
+    promptSnippet: "Search code patterns across filesystem using AST-aware matching",
     description:
       "Search code patterns across filesystem using AST-aware matching. Supports 25 languages. Use meta-variables: $VAR (single node), $$$ (multiple nodes). IMPORTANT: Patterns must be complete AST nodes (valid code). Examples: 'console.log($MSG)', 'def $FUNC($$$):', 'async function $NAME($$$)'",
     parameters: Type.Object({

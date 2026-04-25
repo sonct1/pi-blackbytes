@@ -105,11 +105,7 @@ describe("integration: before_agent_start", () => {
         event.systemPrompt.includes("<available_resources>"),
         "available_resources XML tag present",
       );
-      // Enabled tools should appear
-      assert.ok(
-        event.systemPrompt.includes("hashline_edit"),
-        "bundled tool 'hashline_edit' listed",
-      );
+      // Enabled agents should appear
       assert.ok(event.systemPrompt.includes("explore"), "sub-agent 'explore' listed");
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
@@ -173,11 +169,8 @@ describe("integration: before_agent_start", () => {
       await mock.emit("before_agent_start", event);
       await settle();
 
-      // 'grep' should not appear as a standalone bundled tool (disabled)
-      const enabledSet = getEnabledSet();
-      assert.equal(enabledSet.tools.has("grep"), false, "'grep' should be disabled in enabled set");
-      // Resources block should still include other tools
-      assert.ok(event.systemPrompt.includes("hashline_edit"), "other bundled tools still listed");
+      // Resources block lists agents, not individual tools
+      assert.ok(event.systemPrompt.includes("explore"), "sub-agent still listed");
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
     }

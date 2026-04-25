@@ -4,37 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-// We test the execute logic directly, bypassing pi registration
 async function runGlob(params: { pattern: string; path?: string }): Promise<string> {
-  // Dynamic import to get the execute function behavior
-  // We replicate the logic here to avoid needing pi
-  const fg = (await import("fast-glob")).default;
-  const { stat } = await import("node:fs/promises");
+  const { executeGlob } = await import("../index.js");
+  const result = await executeGlob(params);
+  const firstBlock = result.content[0];
 
-  const RESULT_CAP = 100;
-  const { pattern, path: cwd } = params;
-
-  const matches: string[] = await fg(pattern, {
-    cwd: cwd ?? process.cwd(),
-    absolute: true,
-    onlyFiles: true,
-    followSymbolicLinks: false,
-  });
-
-  const withMtime = await Promise.all(
-    matches.map(async (file) => {
-      try {
-        const s = await stat(file);
-        return { file, mtime: s.mtimeMs };
-      } catch {
-        return { file, mtime: 0 };
-      }
-    }),
-  );
-  withMtime.sort((a, b) => b.mtime - a.mtime);
-  const capped = withMtime.slice(0, RESULT_CAP).map((x) => x.file);
-
-  return capped.length > 0 ? capped.join("\n") : "(no matches)";
+  assert.equal(firstBlock?.type, "text");
+  return firstBlock.text;
 }
 
 describe("glob tool", () => {
@@ -62,7 +38,7 @@ describe("glob tool", () => {
     }
   });
 
-  it("caps results at 100", async () => {
+  it("returns compact status and caps displayed matches", async () => {
     const dir = await mkdtemp(join(tmpdir(), "glob-cap-"));
     try {
       // Create 120 files
@@ -71,8 +47,11 @@ describe("glob tool", () => {
       }
 
       const result = await runGlob({ pattern: "*.txt", path: dir });
-      const files = result.split("\n");
-      assert.ok(files.length <= 100, `Expected <= 100 results, got ${files.length}`);
+      const files = result.split("\n").filter((line) => line.startsWith(dir));
+      assert.equal(files.length, 25, `Expected 25 displayed results, got ${files.length}`);
+      assert.match(result, /Found 120 files\./);
+      assert.match(result, /Showing newest 25 of 120\./);
+      assert.match(result, /Omitted 95 older match\(es\)/);
     } finally {
       await rm(dir, { recursive: true });
     }
@@ -89,14 +68,11 @@ describe("glob tool", () => {
   });
 
   it("handles invalid path gracefully", async () => {
-    // Import and test execute which wraps errors
-    const mod = await import("../index.js");
-    // Since we can't call execute directly without the full module structure,
-    // we test by passing a non-existent directory to fast-glob which should error or return []
-    const result = await runGlob({ pattern: "**/*.ts", path: "/nonexistent-dir-xyz-12345" }).catch(
-      (err: unknown) => `Error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    // Either returns empty or an error message - both are acceptable
+    const result = await runGlob({
+      pattern: "**/*.ts",
+      path: "/nonexistent-dir-xyz-12345",
+    });
+
     assert.ok(typeof result === "string", "should return a string");
   });
 });

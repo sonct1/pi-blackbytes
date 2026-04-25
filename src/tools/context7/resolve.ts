@@ -87,6 +87,7 @@ export async function executeResolveLibraryId(
 export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.DOCS_RESOLVE, {
     name: TOOL_NAMES.DOCS_RESOLVE,
+    promptSnippet: "Resolve a package name to a Context7 library ID for documentation lookup",
     description:
       "Resolves a package/product name to a Context7-compatible library ID. Call this before docs_query to get the correct library ID in /org/project format.",
     parameters: Type.Object({

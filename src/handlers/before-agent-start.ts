@@ -1,5 +1,5 @@
 import { getEnabledSet } from "../config/enabled-set.js";
-import { BUNDLED_TOOLS, TOOL_GROUPS, getRegisteredSubAgents } from "../config/resource-metadata.js";
+import { getRegisteredSubAgents } from "../config/resource-metadata.js";
 import { createBytesPromptRenderContext } from "../prompts/bytes/shared.js";
 import { renderBytesPrompt } from "../prompts/loader.js";
 import { resolvePromptModelFamily } from "../shared/model-capability.js";
@@ -15,43 +15,14 @@ const SENTINEL_END = "<!-- pi-blackbytes:resources:end -->";
 // Block builder
 // ---------------------------------------------------------------------------
 
-function buildResourcesBlock(
-  enabledTools: ReadonlySet<string>,
-  enabledSubAgents: ReadonlySet<string>,
-): string {
-  const lines: string[] = [
-    "The following resources are enabled in this session. Only reference tools, tool groups, and agents listed here \u2014 others may be disabled or unavailable.",
-    "",
-  ];
-
-  // Bundled tools
-  const activeBundled = BUNDLED_TOOLS.map((t) => t.name).filter((t) => enabledTools.has(t));
-  if (activeBundled.length > 0) {
-    lines.push(`Bundled tools: ${activeBundled.join(", ")}`);
-  }
-
-  // External tools by group
-  const activeGroups = TOOL_GROUPS.map((group) => ({
-    group,
-    enabledTools: group.tools.filter((toolName) => enabledTools.has(toolName)),
-  })).filter(({ enabledTools }) => enabledTools.length > 0);
-  if (activeGroups.length > 0) {
-    lines.push("External tools:");
-    for (const { group, enabledTools } of activeGroups) {
-      lines.push(`- ${group.name} (${group.description}): ${enabledTools.join(", ")}`);
-    }
-  }
-
-  // Available agents
+function buildResourcesBlock(enabledSubAgents: ReadonlySet<string>): string {
   const activeAgents = getRegisteredSubAgents().filter((a) => enabledSubAgents.has(a.name));
-  if (activeAgents.length > 0) {
-    lines.push("");
-    lines.push("Available agents:");
-    for (const agent of activeAgents) {
-      lines.push(`- ${agent.name}: ${agent.description}`);
-    }
-  }
+  if (activeAgents.length === 0) return "";
 
+  const lines: string[] = ["Available agents:"];
+  for (const agent of activeAgents) {
+    lines.push(`- ${agent.name}: ${agent.description}`);
+  }
   return lines.join("\n");
 }
 
@@ -71,21 +42,23 @@ export function injectPromptAugmentation(systemPrompt: string, modelId?: string)
     // Fall back to a minimal safe overlay when runtime state is unavailable.
   }
 
-  const resourcesInner = buildResourcesBlock(enabledTools, enabledSubAgents);
   const family = resolvePromptModelFamily(modelId);
+  const resourcesInner = buildResourcesBlock(enabledSubAgents);
   const bytesPrompt = renderBytesPrompt(
     createBytesPromptRenderContext(family, enabledTools, enabledSubAgents),
   );
 
-  const block = [
-    SENTINEL_START,
-    bytesPrompt,
-    "",
-    "<available_resources>",
-    resourcesInner,
-    "</available_resources>",
-    SENTINEL_END,
-  ].join("\n");
+  const parts: string[] = [SENTINEL_START, bytesPrompt];
+  if (resourcesInner) {
+    if (family === "claude" || family === "other") {
+      parts.push("", "<available_resources>", resourcesInner, "</available_resources>");
+    } else {
+      parts.push("", resourcesInner);
+    }
+  }
+  parts.push(SENTINEL_END);
+
+  const block = parts.join("\n");
 
   const startIdx = systemPrompt.indexOf(SENTINEL_START);
   const endIdx = systemPrompt.indexOf(SENTINEL_END);

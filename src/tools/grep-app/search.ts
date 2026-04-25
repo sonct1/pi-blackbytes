@@ -107,6 +107,7 @@ export async function executeGrepAppSearch(
 export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.GH_SEARCH, {
     name: TOOL_NAMES.GH_SEARCH,
+    promptSnippet: "Search code patterns across public GitHub repositories",
     description:
       "Search code patterns across public GitHub repositories using grep.app. Returns matching code snippets with repo, file, and line number context. Use for finding real-world usage examples of APIs, libraries, or patterns.",
     parameters: Type.Object({

@@ -116,6 +116,7 @@ export async function executeWebsearchSearch(
 export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.WEB_SEARCH, {
     name: TOOL_NAMES.WEB_SEARCH,
+    promptSnippet: "Search the web for any topic and get clean, ready-to-use content",
     description:
       "Search the web for any topic. Returns a list of relevant results with titles, URLs, and snippets. Supports Exa and Tavily providers.",
     parameters: Type.Object({

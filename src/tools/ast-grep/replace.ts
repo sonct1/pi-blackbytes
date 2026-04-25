@@ -7,6 +7,7 @@ import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
 export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.AST_REPLACE, {
     name: TOOL_NAMES.AST_REPLACE,
+    promptSnippet: "Replace code patterns across filesystem with AST-aware rewriting",
     description:
       "Replace code patterns across filesystem with AST-aware rewriting. Dry-run by default. Use meta-variables in rewrite to preserve matched content. Example: pattern='console.log($MSG)' rewrite='logger.info($MSG)'",
     parameters: Type.Object({

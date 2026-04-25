@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import {
-  ALL_TOOL_NAMES,
-  BUNDLED_TOOLS,
   SUB_AGENTS,
-  TOOL_GROUPS,
   _resetSubAgentRegistry,
   registerSubAgentMeta,
 } from "../../config/resource-metadata.js";
@@ -37,8 +34,20 @@ describe("injectPromptAugmentation", () => {
     assert.ok(result.startsWith(original), "original prompt preserved at start");
     assert.ok(result.includes("<!-- pi-blackbytes:resources:start -->"), "start sentinel present");
     assert.ok(result.includes("<!-- pi-blackbytes:resources:end -->"), "end sentinel present");
-    assert.ok(result.includes("<available_resources>"), "XML tag present");
-    assert.ok(result.includes("hashline_edit"), "bundled tool listed");
+    assert.ok(result.includes("<available_resources>"), "XML tag present (claude default)");
+    assert.ok(result.includes("explore"), "sub-agent listed");
+  });
+
+  it("resources block only lists sub-agents, not individual tools", () => {
+    seedBuiltinAgents();
+    initEnabledSet(makeConfig());
+    const result = injectPromptAugmentation("Base prompt.");
+    // Tool groups should NOT appear in resources block (Pi base prompt already lists them)
+    assert.ok(!result.includes("Bundled tools:"), "no bundled tools section");
+    assert.ok(!result.includes("External tools:"), "no external tools section");
+    // But agents should be listed
+    assert.ok(result.includes("Available agents:"), "agents section present");
+    assert.ok(result.includes("explore"), "agent name present");
   });
 
   it("includes prompt guidance in augmentation block", () => {
@@ -66,23 +75,13 @@ describe("injectPromptAugmentation", () => {
     assert.ok(second.startsWith(original), "original text still at start");
   });
 
-  it("disabled tool group is excluded when all its tools are disabled", () => {
+  it("disabled sub-agent does not affect resource block tool listing", () => {
     seedBuiltinAgents();
     initEnabledSet(makeConfig({ disabled_tools: ["gh_search"] }));
     const result = injectPromptAugmentation("prompt");
-    assert.ok(!result.includes("grep_app"), "disabled tool group not listed");
-    assert.ok(result.includes("hashline_edit"), "bundled tools still present");
-  });
-
-  it("resource block lists exact enabled tools for partially enabled groups", () => {
-    seedBuiltinAgents();
-    initEnabledSet(makeConfig({ disabled_tools: ["web_search", "docs_query"] }));
-    const result = injectPromptAugmentation("prompt");
-
-    assert.ok(result.includes("websearch (web search and page fetching): web_fetch"));
-    assert.ok(!result.includes("websearch (web search and page fetching): web_search"));
-    assert.ok(result.includes("context7 (library/framework documentation lookup): docs_resolve"));
-    assert.ok(!result.includes("context7 (library/framework documentation lookup): docs_query"));
+    // Tool disabling should not affect the agents-only resources block
+    assert.ok(result.includes("explore"), "agents still present");
+    assert.ok(!result.includes("grep_app"), "tool groups not listed regardless");
   });
 
   it("disabled sub-agent is excluded from resources block", () => {
@@ -93,19 +92,20 @@ describe("injectPromptAugmentation", () => {
     assert.ok(result.includes("explore"), "other agents still present");
   });
 
-  it("resource block lists bundled tools and tool group descriptions", () => {
+  it("uses XML wrapper for available_resources with claude family", () => {
     seedBuiltinAgents();
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("prompt");
-    for (const tool of BUNDLED_TOOLS) {
-      assert.ok(result.includes(tool.name), `bundled tool ${tool.name} should appear`);
-    }
-    for (const group of TOOL_GROUPS) {
-      assert.ok(
-        result.includes(group.description),
-        `tool group ${group.name} description should appear`,
-      );
-    }
+    assert.ok(result.includes("<available_resources>"), "XML open tag for claude");
+    assert.ok(result.includes("</available_resources>"), "XML close tag for claude");
+  });
+
+  it("omits XML wrapper for available_resources with gpt family", () => {
+    seedBuiltinAgents();
+    initEnabledSet(makeConfig());
+    const result = injectPromptAugmentation("prompt", "gpt-4o");
+    assert.ok(!result.includes("<available_resources>"), "no XML tag for gpt");
+    assert.ok(result.includes("Available agents:"), "agents still listed for gpt");
   });
 
   it("resource block lists all enabled sub-agents from shared metadata", () => {
@@ -167,7 +167,6 @@ it("does not advertise docs lookup when only context7 resolve is enabled", () =>
   const result = injectPromptAugmentation("prompt");
 
   assert.ok(!result.includes("Documentation lookup may be available"));
-  assert.ok(result.includes("context7 (library/framework documentation lookup): docs_resolve"));
 });
 
 it("does not advertise web lookup when websearch is fully disabled", () => {

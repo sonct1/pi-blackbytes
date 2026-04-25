@@ -106,6 +106,60 @@ describe("integration: session_start", () => {
     }
   });
 
+  it("all registered tools include a non-empty promptSnippet", async () => {
+    const subDir = await makeTempDir();
+    try {
+      await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
+      process.env.PI_AGENT_DIR = subDir;
+
+      const mock = createMockPi();
+      bootstrap(mock);
+      mock.emit("session_start", {});
+      await waitForEnabledSet();
+
+      const { ALL_TOOL_NAMES } = await import("../../config/resource-metadata.js");
+      const registeredTools = mock.calls.registerTool;
+
+      for (const toolName of ALL_TOOL_NAMES) {
+        const tool: any = registeredTools.find(
+          (t: any) => (t.name ?? t.definition?.name) === toolName,
+        );
+        assert.ok(tool, `tool '${toolName}' should be registered`);
+        assert.ok(
+          typeof tool.promptSnippet === "string" && tool.promptSnippet.length > 0,
+          `tool '${toolName}' must have a non-empty promptSnippet`,
+        );
+      }
+    } finally {
+      await fs.rm(subDir, { recursive: true, force: true });
+    }
+  });
+
+  it("hashline_edit includes promptGuidelines array", async () => {
+    const subDir = await makeTempDir();
+    try {
+      await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
+      process.env.PI_AGENT_DIR = subDir;
+
+      const mock = createMockPi();
+      bootstrap(mock);
+      mock.emit("session_start", {});
+      await waitForEnabledSet();
+
+      const registeredTools = mock.calls.registerTool;
+      const hashlineEdit: any = registeredTools.find(
+        (t: any) => (t.name ?? t.definition?.name) === "hashline_edit",
+      );
+      assert.ok(hashlineEdit, "hashline_edit should be registered");
+      assert.ok(
+        Array.isArray(hashlineEdit.promptGuidelines) && hashlineEdit.promptGuidelines.length >= 2,
+        "hashline_edit must have promptGuidelines array with at least 2 entries",
+      );
+    } finally {
+      await fs.rm(subDir, { recursive: true, force: true });
+    }
+  });
+
   it("malformed path: invalid JSON in settings uses defaults and does not throw", async () => {
     // Arrange
     const subDir = await makeTempDir();

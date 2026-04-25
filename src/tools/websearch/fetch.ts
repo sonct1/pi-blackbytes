@@ -36,6 +36,7 @@ export async function executeWebsearchFetch(
 export function registerWebsearchFetchTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.WEB_FETCH, {
     name: TOOL_NAMES.WEB_FETCH,
+    promptSnippet: "Fetch a URL and return content in markdown, text, or html format",
     description:
       "Fetch a URL and report the final URL and HTTP status. Automatically upgrades http:// to https://.",
     parameters: Type.Object({

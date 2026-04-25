@@ -251,6 +251,11 @@ export function applyHashlineEdits(input: HashlineEditInput): ToolResult {
 export function registerHashlineEditTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.HASHLINE_EDIT, {
     name: TOOL_NAMES.HASHLINE_EDIT,
+    promptSnippet: "Edit files using LINE#ID anchors for precise, safe modifications",
+    promptGuidelines: [
+      "Prefer hashline_edit over edit for all file modifications when available.",
+      "Always read the target file first to obtain LINE#ID anchors before editing.",
+    ],
     description:
       "Edit files using LINE#ID format for precise, safe modifications. " +
       "Applies multiple edits bottom-up using anchors like '10#VK'. " +

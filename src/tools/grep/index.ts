@@ -251,6 +251,7 @@ async function executeGrep(params: GrepParams): Promise<TextToolResult> {
 export function registerGrepTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.GREP, {
     name: TOOL_NAMES.GREP,
+    promptSnippet: "Search file contents using regular expressions with safety limits",
     description:
       "Search file contents using regular expressions. Uses ripgrep (rg) when available for speed, falls back to Node.js implementation. Supports content, files_with_matches, and count output modes. Use context to show surrounding lines.",
     parameters: Type.Object({

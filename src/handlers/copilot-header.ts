@@ -5,5 +5,5 @@ export function registerCopilotHeader(
   config: { copilot_initiator_header: boolean },
 ): void {
   if (!config.copilot_initiator_header) return;
-  pi.registerProvider("github-copilot", { headers: { "x-initiator": "agent" } });
+  pi.registerProvider("github-copilot", { headers: { "X-Initiator": "agent" } });
 }

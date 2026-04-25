@@ -1,10 +1,13 @@
 import type { TObject } from "@sinclair/typebox";
 import type { SubAgentMeta } from "../config/resource-metadata.js";
+import type { AgentMutability, FinalizeMode } from "./delegable-tools.js";
 
 /** Model and reasoning-effort overrides resolved at execution time. */
 export interface ModelOverrides {
   model?: string;
   reasoningEffort?: string;
+  timeoutMs?: number;
+  fallbackModels?: readonly string[];
 }
 
 /**
@@ -56,6 +59,62 @@ export interface SubAgentDeclaration<
    * May return a plain object or a Promise for async config loading.
    */
   readonly resolveModelOverrides?: () => ModelOverrides | Promise<ModelOverrides>;
+
+  /**
+   * Per-agent mutability classification consumed by the nested-tool finalizer.
+   * - `read-only`   (default) — only read/search/docs tools may reach `--tools`;
+   *                  any mutating/exec tool in the resolved allowlist is stripped.
+   * - `full-access` — both read-only and mutating/exec tools are permitted.
+   */
+  readonly mutability?: AgentMutability;
+
+  /**
+   * Declaration-time defaults for model / reasoning effort. Forms the lowest
+   * precedence layer in the per-agent config resolver:
+   *   declaration defaults < YAML declaration fields < JSON `sub_agents.<name>` overrides.
+   * Builtin agents may set this to express baseline behavior (e.g. Oracle's
+   * `reasoningEffort: 'high'`). YAML loader populates this from the YAML file.
+   */
+  readonly staticOverrides?: ModelOverrides;
+
+  /**
+   * Origin of the declaration. `"builtin"` for code-defined agents, `"yaml"`
+   * for declarations loaded from `$PI_AGENT_DIR/sub-agents/*.yaml`. Used by
+   * the snapshot + `/blackbytes-status` so users can see where each agent
+   * comes from. Defaults to `"builtin"` when omitted.
+   */
+  readonly source?: "builtin" | "yaml";
+
+  /** Absolute path to the YAML file when `source === "yaml"`. */
+  readonly sourcePath?: string;
+
+  /**
+   * Validation strictness applied by the nested-tool finalizer.
+   * - `strict`  (default for builtins) — throws on unknown / `delegate_*` names.
+   * - `lenient` (used for YAML-defined agents) — silently drops them.
+   */
+  readonly finalizeMode?: FinalizeMode;
+
+  /**
+   * How the system prompt is assembled when passed to the nested Pi process.
+   * - `'static'` (default) — uses `systemPrompt` / `systemPromptPath` verbatim.
+   * - `'append'` — reserved for future use; append parent-session context before
+   *   the sub-agent's own prompt. **Not yet supported.** Passing this value
+   *   causes `buildSystemPrompt()` to throw at execution time so the caller
+   *   fails loudly rather than silently falling back.
+   */
+  readonly promptMode?: "static" | "append";
+
+  /**
+   * Optional builder invoked AFTER tool finalization. Returned text is
+   * prepended to the resolved system prompt before `runNestedPi()` is called.
+   * Use for bounded safety/context overlays (e.g. the General agent overlay).
+   * Errors thrown here are logged and the agent falls back to its base prompt.
+   */
+  readonly prependSystemPrompt?: (ctx: {
+    readonly cwd?: string;
+    readonly finalizedTools: readonly string[];
+  }) => string | Promise<string>;
 }
 
 /**

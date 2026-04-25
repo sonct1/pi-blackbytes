@@ -7,7 +7,15 @@ import { z } from "zod";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getLogger } from "../shared/logger.js";
 import { type SubAgentDeclaration, defineSubAgent } from "./declaration.js";
-import { resolveToolStrategy, validateToolNames } from "./delegable-tools.js";
+import {
+  type AgentMutability,
+  EXTENSION_TOOL_NAMES,
+  MUTATING_EXEC_TOOLS,
+  PI_DEFAULT_TOOLS,
+  READ_SEARCH_DOCS_TOOLS,
+  validateToolNames,
+} from "./delegable-tools.js";
+import type { YamlDiagnostics, YamlLoadedDeclaration, YamlSkippedFile } from "./diagnostics.js";
 
 // ---------------------------------------------------------------------------
 // YAML schema
@@ -28,6 +36,37 @@ const YamlSubAgentSchema = z
     denied_tools: z.array(z.string()).optional(),
     model: z.string().optional(),
     reasoning_effort: z.string().optional(),
+    timeout_ms: z
+      .number()
+      .int("timeout_ms must be an integer")
+      .positive("timeout_ms must be positive")
+      .max(3_600_000, "timeout_ms must not exceed 3600000 (1 hour)")
+      .optional(),
+    /**
+     * Optional explicit mutability override. When `allowed_tools` includes
+     * mutating/exec tools (write/edit/bash/hashline_edit/ast_replace) the
+     * loader auto-promotes the agent to `full-access`. Set this field to
+     * `read-only` to force stripping of those tools, or to `full-access`
+     * to opt in to write capability without listing a mutating tool.
+     */
+    mutability: z.enum(["read-only", "full-access"]).optional(),
+    /**
+     * How the system prompt is assembled. Mirrors `SubAgentDeclaration.promptMode`.
+     * - `"static"` (default) — use `system_prompt` verbatim.
+     * - `"append"` — reserved; not yet supported (throws at execution time).
+     */
+    prompt_mode: z.enum(["static", "append"]).optional(),
+    /**
+     * Optional fallback model chain for provider/model unavailability errors.
+     * Mirrors `ModelOverrides.fallbackModels`. Folded into `staticOverrides` by the loader.
+     */
+    fallback_models: z
+      .array(z.string().min(1, "fallback_models entries must be non-empty strings"))
+      .max(5, "fallback_models must not exceed 5 entries")
+      .refine((arr) => new Set(arr).size === arr.length, {
+        message: "fallback_models must not contain duplicate entries",
+      })
+      .optional(),
   })
   .refine((d) => !(d.allowed_tools && d.denied_tools), {
     message: "allowed_tools and denied_tools are mutually exclusive",
@@ -103,26 +142,52 @@ const YAML_AGENT_PARAMETERS = Type.Object({
   prompt: Type.String({ description: "The task or question for this agent" }),
 });
 
-function toDeclaration(input: YamlSubAgentInput): SubAgentDeclaration<YamlAgentParams> {
+function toDeclaration(
+  input: YamlSubAgentInput,
+  sourcePath?: string,
+): SubAgentDeclaration<YamlAgentParams> {
   const toolStrategy = input.allowed_tools
     ? { kind: "allowlist" as const, tools: input.allowed_tools }
     : input.denied_tools
       ? { kind: "denylist" as const, tools: input.denied_tools }
       : undefined;
 
+  // YAML default-mode base set: read/search/docs only. Mutating tools are
+  // never granted unless `allowed_tools` explicitly opts in.
+  const yamlSafeBaseTools = (): readonly string[] => {
+    const enabled = getEnabledSet().tools;
+    const base = new Set<string>();
+    for (const name of READ_SEARCH_DOCS_TOOLS) base.add(name);
+    for (const name of PI_DEFAULT_TOOLS) base.add(name);
+    // Filter extension tools by enabledSet so globally disabled extension
+    // tools never enter the candidate list. Pi built-ins remain (the
+    // finalizer still applies the global denylist on top).
+    return [...base].filter((t) => enabled.has(t) || !EXTENSION_TOOL_NAMES.has(t));
+  };
+
   const allowedTools: SubAgentDeclaration<YamlAgentParams>["allowedTools"] = toolStrategy
     ? toolStrategy.kind === "allowlist"
       ? toolStrategy.tools
-      : () => resolveToolStrategy(toolStrategy, getEnabledSet().tools)
-    : () => resolveToolStrategy({ kind: "all-except-delegates" }, getEnabledSet().tools);
+      : () => {
+          const denied = new Set(toolStrategy.tools);
+          return yamlSafeBaseTools().filter((t) => !denied.has(t));
+        }
+    : () => yamlSafeBaseTools();
 
-  const modelOverrides =
-    input.model || input.reasoning_effort
-      ? () => ({
+  const staticOverrides =
+    input.model || input.reasoning_effort || input.timeout_ms || input.fallback_models
+      ? {
           model: input.model,
           reasoningEffort: input.reasoning_effort,
-        })
+          timeoutMs: input.timeout_ms,
+          fallbackModels: input.fallback_models,
+        }
       : undefined;
+
+  // Auto-detect mutability for allowlist mode unless explicitly set.
+  const declaredMutability: AgentMutability =
+    input.mutability ??
+    (input.allowed_tools?.some((t) => MUTATING_EXEC_TOOLS.has(t)) ? "full-access" : "read-only");
 
   return defineSubAgent<YamlAgentParams>({
     name: input.name,
@@ -131,10 +196,15 @@ function toDeclaration(input: YamlSubAgentInput): SubAgentDeclaration<YamlAgentP
     parameters: YAML_AGENT_PARAMETERS,
     systemPrompt: input.system_prompt,
     allowedTools,
+    mutability: declaredMutability,
+    finalizeMode: "lenient",
+    source: "yaml",
+    sourcePath,
+    promptMode: input.prompt_mode,
     buildUserPrompt(params: YamlAgentParams) {
       return params.prompt;
     },
-    resolveModelOverrides: modelOverrides,
+    staticOverrides,
   });
 }
 
@@ -142,14 +212,27 @@ function toDeclaration(input: YamlSubAgentInput): SubAgentDeclaration<YamlAgentP
 // Public loader
 // ---------------------------------------------------------------------------
 
+export interface LoadYamlDeclarationsResult {
+  declarations: SubAgentDeclaration[];
+  diagnostics: YamlDiagnostics;
+}
+
 /**
  * Loads YAML sub-agent declarations from `$PI_AGENT_DIR/sub-agents/*.yaml`.
  * Invalid files are logged as warnings and skipped.
- * Returns only successfully validated declarations.
+ * Duplicate names (against `reservedNames` builtins or earlier YAML files)
+ * are skipped with diagnostics rather than throwing.
+ * Returns successfully validated declarations plus full load diagnostics.
  */
-export async function loadYamlDeclarations(): Promise<SubAgentDeclaration[]> {
+export async function loadYamlDeclarations(
+  reservedNames: readonly string[] = [],
+): Promise<LoadYamlDeclarationsResult> {
   const logger = getLogger();
   const dir = resolveSubAgentDir();
+
+  const scannedFiles: string[] = [];
+  const loadedDeclarations: YamlLoadedDeclaration[] = [];
+  const skippedFiles: YamlSkippedFile[] = [];
 
   let entries: string[];
   try {
@@ -159,18 +242,50 @@ export async function loadYamlDeclarations(): Promise<SubAgentDeclaration[]> {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
       logger.debug("No sub-agents directory found, skipping YAML loading", { dir });
-    } else {
-      logger.warn("Failed to read sub-agents directory", { dir, code });
+      return {
+        declarations: [],
+        diagnostics: {
+          directory: dir,
+          directoryExists: false,
+          scannedFiles: [],
+          loadedDeclarations: [],
+          skippedFiles: [],
+        },
+      };
     }
-    return [];
+    logger.warn("Failed to read sub-agents directory", { dir, code });
+    return {
+      declarations: [],
+      diagnostics: {
+        directory: dir,
+        directoryExists: false,
+        scannedFiles: [],
+        loadedDeclarations: [],
+        skippedFiles: [{ file: "<directory>", reason: `Failed to read directory: ${code}` }],
+      },
+    };
   }
+
+  scannedFiles.push(...entries);
 
   if (entries.length === 0) {
     logger.debug("No YAML sub-agent files found", { dir });
-    return [];
+    return {
+      declarations: [],
+      diagnostics: {
+        directory: dir,
+        directoryExists: true,
+        scannedFiles: [],
+        loadedDeclarations: [],
+        skippedFiles: [],
+      },
+    };
   }
 
   const declarations: SubAgentDeclaration[] = [];
+  // name -> basename of the file that accepted the declaration
+  const acceptedNamesByFile = new Map<string, string>();
+  const reservedSet = new Set(reservedNames);
 
   for (const entry of entries) {
     const filePath = path.join(dir, entry);
@@ -183,6 +298,7 @@ export async function loadYamlDeclarations(): Promise<SubAgentDeclaration[]> {
         file: entry,
         error: (err as Error).message,
       });
+      skippedFiles.push({ file: entry, reason: `Failed to read file: ${(err as Error).message}` });
       continue;
     }
 
@@ -192,6 +308,7 @@ export async function loadYamlDeclarations(): Promise<SubAgentDeclaration[]> {
         file: entry,
         reason: parseResult.reason,
       });
+      skippedFiles.push({ file: entry, reason: parseResult.reason });
       continue;
     }
 
@@ -201,15 +318,61 @@ export async function loadYamlDeclarations(): Promise<SubAgentDeclaration[]> {
         file: entry,
         reason: toolResult.reason,
       });
+      skippedFiles.push({ file: entry, reason: toolResult.reason });
       continue;
     }
 
-    declarations.push(toDeclaration(parseResult.value));
+    const agentName = parseResult.value.name;
+
+    // Check conflict with builtin names
+    if (reservedSet.has(agentName)) {
+      const reason = `Name conflicts with builtin sub-agent "${agentName}"`;
+      logger.warn("Skipping YAML sub-agent due to name conflict with builtin", {
+        file: entry,
+        name: agentName,
+      });
+      skippedFiles.push({
+        file: entry,
+        reason,
+        conflictWith: { source: "builtin", name: agentName },
+      });
+      continue;
+    }
+
+    // Check conflict with earlier YAML files
+    const earlierFile = acceptedNamesByFile.get(agentName);
+    if (earlierFile !== undefined) {
+      const reason = `Name conflicts with earlier YAML file ${earlierFile}`;
+      logger.warn("Skipping YAML sub-agent due to name conflict with earlier YAML file", {
+        file: entry,
+        name: agentName,
+        earlierFile,
+      });
+      skippedFiles.push({
+        file: entry,
+        reason,
+        conflictWith: { source: "yaml", name: agentName, file: earlierFile },
+      });
+      continue;
+    }
+
+    declarations.push(toDeclaration(parseResult.value, filePath));
+    acceptedNamesByFile.set(agentName, entry);
+    loadedDeclarations.push({ name: agentName, file: entry });
     logger.info("Loaded YAML sub-agent declaration", {
-      name: parseResult.value.name,
+      name: agentName,
       file: entry,
     });
   }
 
-  return declarations;
+  return {
+    declarations,
+    diagnostics: {
+      directory: dir,
+      directoryExists: true,
+      scannedFiles,
+      loadedDeclarations,
+      skippedFiles,
+    },
+  };
 }

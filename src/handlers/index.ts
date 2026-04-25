@@ -13,13 +13,16 @@ import { registerSubAgentMeta } from "../config/resource-metadata.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
 import { getModelFamily } from "../shared/model-capability.js";
+import { resetSessionRuntimeState } from "../shared/session-state.js";
 import { declarationToMeta } from "../sub-agents/declaration.js";
+import { setYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { exploreDeclaration } from "../sub-agents/explore.js";
 import { generalDeclaration } from "../sub-agents/general.js";
 import { librarianDeclaration } from "../sub-agents/librarian.js";
 import { loadYamlDeclarations } from "../sub-agents/loader.js";
 import { oracleDeclaration } from "../sub-agents/oracle.js";
 import { registerSubAgent } from "../sub-agents/register.js";
+import { initAgentSnapshot } from "../sub-agents/snapshot.js";
 import { assertUniqueNames } from "../sub-agents/validate-unique.js";
 import { registerAstGrepReplaceTool } from "../tools/ast-grep/replace.js";
 import { registerAstGrepSearchTool } from "../tools/ast-grep/search.js";
@@ -53,17 +56,26 @@ export async function handleSessionStart(
   _ctx: ExtensionContext,
 ): Promise<void> {
   const logger = getLogger();
+  // Idempotency: clear any session-scoped runtime state before loading
+  // config or registering anything. This protects against repeated startups
+  // in the same process (e.g. tests, restarts) and against a previous
+  // partial/failed startup leaving stale singletons.
+  resetSessionRuntimeState();
   const config = await loadBlackbytesConfig();
 
   // Load YAML declarations and combine with builtins
-  const yamlDeclarations = await loadYamlDeclarations();
+  // Builtin names are reserved — YAML files claiming the same name are skipped with diagnostics.
+  assertUniqueNames(BUILTIN_DECLARATIONS.map((d) => d.name));
+  const builtinNames = BUILTIN_DECLARATIONS.map((d) => d.name);
+  const { declarations: yamlDeclarations, diagnostics } = await loadYamlDeclarations(builtinNames);
+  setYamlDiagnostics(diagnostics);
   const allDeclarations = [...BUILTIN_DECLARATIONS, ...yamlDeclarations];
-
-  // Assert unique names across all declarations before enablement
+  // allDeclarations is now guaranteed unique: builtins are unique (asserted above),
+  // and loader already deduped yaml against builtins + earlier yaml files.
   const allNames = allDeclarations.map((d) => d.name);
-  assertUniqueNames(allNames);
 
   initEnabledSet(config, allNames);
+  initAgentSnapshot(allDeclarations, config);
 
   if (yamlDeclarations.length > 0) {
     logger.info("Loaded YAML sub-agent declarations", {

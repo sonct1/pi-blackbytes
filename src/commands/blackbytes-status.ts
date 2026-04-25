@@ -1,5 +1,8 @@
 import { type EnabledSet, getEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
+import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
+import { getAgentSnapshot } from "../sub-agents/snapshot.js";
+import type { AgentSnapshot } from "../sub-agents/snapshot.js";
 
 const SECRET_KEYS = ["api_key", "exa_api_key", "tavily_api_key", "authorization"];
 
@@ -22,6 +25,140 @@ function redactConfig(config: Record<string, unknown>): Record<string, unknown> 
   return result;
 }
 
+/**
+ * Identify per-agent settings that are accepted by the schema but not yet
+ * threaded into the nested Pi CLI. These are surfaced under a dedicated
+ * "Reserved / Unsupported" section so users can see at a glance that the
+ * value is preserved without effect.
+ *
+ * Currently `temperature` is the only such field: the installed Pi CLI does
+ * not accept `--temperature` (see PI_CLI_COMPATIBILITY_EVIDENCE in
+ * src/sub-agents/__tests__/runner.test.ts), and the runner therefore never
+ * emits the flag.
+ */
+const RESERVED_AGENT_FIELDS = ["temperature"] as const;
+
+function collectReservedAgentSettings(
+  subAgents: unknown,
+): Array<{ agent: string; field: string; value: unknown }> {
+  if (!subAgents || typeof subAgents !== "object" || Array.isArray(subAgents)) {
+    return [];
+  }
+  const out: Array<{ agent: string; field: string; value: unknown }> = [];
+  for (const [agent, settings] of Object.entries(subAgents as Record<string, unknown>)) {
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) continue;
+    const obj = settings as Record<string, unknown>;
+    for (const field of RESERVED_AGENT_FIELDS) {
+      if (field in obj && obj[field] !== undefined) {
+        out.push({ agent, field, value: obj[field] });
+      }
+    }
+  }
+  return out;
+}
+
+function collectReservedFromSnapshot(
+  snapshot: ReadonlyMap<string, AgentSnapshot>,
+): Array<{ agent: string; field: string; value: unknown }> {
+  const out: Array<{ agent: string; field: string; value: unknown }> = [];
+  for (const [agent, snap] of snapshot) {
+    for (const field of RESERVED_AGENT_FIELDS) {
+      if (field in snap.reserved && snap.reserved[field] !== undefined) {
+        out.push({ agent, field, value: snap.reserved[field] });
+      }
+    }
+  }
+  return out;
+}
+
+function buildSnapshotSection(snapshot: ReadonlyMap<string, AgentSnapshot>): string[] {
+  const lines: string[] = [
+    "### Sub-Agent Snapshot",
+    "_Resolved at session_start; immutable for the life of this session._",
+    "",
+  ];
+  if (snapshot.size === 0) {
+    lines.push("_No sub-agents registered._");
+    return lines;
+  }
+  for (const snap of snapshot.values()) {
+    const origin =
+      snap.source === "yaml" && snap.sourcePath ? `yaml (${snap.sourcePath})` : snap.source;
+    lines.push(`- **${snap.name}** — source: ${origin}`);
+    if (snap.model) lines.push(`  - model: \`${snap.model}\``);
+    if (snap.reasoningEffort) lines.push(`  - reasoningEffort: \`${snap.reasoningEffort}\``);
+    if (snap.timeoutMs !== undefined) lines.push(`  - timeoutMs: ${snap.timeoutMs}`);
+    // Fallback chain (only show when configured)
+    if (snap.fallbackModels && snap.fallbackModels.length > 0) {
+      const chain = snap.fallbackModels.map((m) => `\`${m}\``).join(" → ");
+      const eligibility = snap.fallbackEligible
+        ? ""
+        : " _(ineligible — mutating/full-access tool policy)_";
+      lines.push(`  - fallbackModels: ${chain}${eligibility}`);
+    }
+    // Allowed tools summary
+    const ts = snap.allowedToolsSummary;
+    if (ts.mode === "exact") {
+      const toolList = ts.tools.map((t) => `\`${t}\``).join(", ");
+      lines.push(`  - allowedTools (${ts.tools.length}): ${toolList}`);
+    } else {
+      const { read, mutate, pi_builtin, extension } = ts.categories;
+      lines.push(
+        `  - allowedTools (${ts.total}): ${read} read/search/docs, ${mutate} mutating, ${pi_builtin} pi-builtin (extension: ${extension})`,
+      );
+    }
+    const reservedKeys = Object.keys(snap.reserved);
+    if (reservedKeys.length > 0) {
+      lines.push(`  - reserved: ${reservedKeys.map((k) => `\`${k}\``).join(", ")}`);
+    }
+    const extraKeys = Object.keys(snap.extra);
+    if (extraKeys.length > 0) {
+      lines.push(`  - extra: ${extraKeys.map((k) => `\`${k}\``).join(", ")}`);
+    }
+  }
+  lines.push("");
+  lines.push(
+    "_If you edit settings.json or YAML files now, changes will take effect on the next session_start._",
+  );
+  return lines;
+}
+
+function buildYamlDiagnosticsSection(diag: YamlDiagnostics | undefined): string[] {
+  if (!diag) {
+    return ["### YAML Sub-Agents", "_No YAML diagnostics available (session_start has not run)._"];
+  }
+  const lines: string[] = ["### YAML Sub-Agents"];
+  const dirStatus = diag.directoryExists ? "exists" : "not found";
+  lines.push(`- directory: \`${diag.directory}\` (${dirStatus})`);
+  lines.push(`- scanned: ${diag.scannedFiles.length} files`);
+
+  if (diag.loadedDeclarations.length === 0) {
+    lines.push("- loaded: 0");
+  } else {
+    const names = diag.loadedDeclarations.map((d) => `\`${d.name}\``).join(", ");
+    lines.push(`- loaded: ${diag.loadedDeclarations.length} (${names})`);
+  }
+
+  if (diag.skippedFiles.length === 0) {
+    lines.push("- skipped: 0");
+  } else {
+    lines.push(`- skipped: ${diag.skippedFiles.length}`);
+    for (const skip of diag.skippedFiles) {
+      let line = `  - \`${skip.file}\` — ${skip.reason}`;
+      if (skip.conflictWith) {
+        const cw = skip.conflictWith;
+        if (cw.source === "builtin") {
+          line += " (winning source: builtin)";
+        } else {
+          line += ` (winning source: yaml \`${cw.file}\`)`;
+        }
+      }
+      lines.push(line);
+    }
+  }
+  return lines;
+}
+
 export async function handleBlackbytesStatus(): Promise<string> {
   let enabledSet: EnabledSet | undefined;
   try {
@@ -32,6 +169,36 @@ export async function handleBlackbytesStatus(): Promise<string> {
 
   const config = await loadBlackbytesConfig();
   const redacted = redactConfig(config as unknown as Record<string, unknown>);
+
+  // Prefer the session-frozen snapshot. It folds in YAML defaults plus JSON
+  // overrides under deterministic precedence and won't drift if disk files
+  // change mid-session. Falls back to the live config when the snapshot is
+  // not available (e.g. status invoked before session_start completes).
+  const snapshot = getAgentSnapshot();
+  const reserved = snapshot
+    ? collectReservedFromSnapshot(snapshot)
+    : collectReservedAgentSettings((config as unknown as Record<string, unknown>).sub_agents);
+  const reservedLines =
+    reserved.length === 0
+      ? ["### Reserved / Unsupported Settings", "_None._"]
+      : [
+          "### Reserved / Unsupported Settings",
+          "_The following per-agent fields are accepted by the schema and preserved",
+          "in your config, but are NOT yet supported by the nested Pi CLI and have",
+          "no runtime effect today. They are documented here so that no setting is",
+          "silently ignored:_",
+          "",
+          ...reserved.map(
+            (r) =>
+              `- \`sub_agents.${r.agent}.${r.field}\` = ${JSON.stringify(r.value)} _(reserved — not passed to nested Pi)_`,
+          ),
+        ];
+
+  const snapshotLines = snapshot
+    ? buildSnapshotSection(snapshot)
+    : ["### Sub-Agent Snapshot", "_Not initialized yet (session_start has not run)._"];
+
+  const yamlLines = buildYamlDiagnosticsSection(getYamlDiagnostics());
 
   const lines: string[] = [
     "## Blackbytes Status",
@@ -44,6 +211,12 @@ export async function handleBlackbytesStatus(): Promise<string> {
     "",
     "### Enabled Skills",
     ...[...enabledSet.skills].map((s) => `- ${s}`),
+    "",
+    ...reservedLines,
+    "",
+    ...snapshotLines,
+    "",
+    ...yamlLines,
     "",
     "### Config",
     "```json",

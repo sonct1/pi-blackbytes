@@ -5,6 +5,14 @@ export interface EnabledSet {
   readonly tools: ReadonlySet<string>;
   readonly subAgents: ReadonlySet<string>;
   readonly skills: ReadonlySet<string>;
+  /**
+   * Raw user-supplied global tool denylist (config.disabled_tools).
+   * Used by the nested-tool finalizer to enforce a global denylist across
+   * every sub-agent path (extension tools and Pi built-ins) before invoking
+   * `runNestedPi()`. Names that are not recognized as extension tools are
+   * still respected here so the denylist works against Pi built-ins too.
+   */
+  readonly disabledTools: ReadonlySet<string>;
 }
 
 export function computeEnabledSet(
@@ -19,7 +27,7 @@ export function computeEnabledSet(
   const subAgents = new Set(agentNames.filter((a) => !disabledSubAgents.has(a)));
   const skills = new Set(DEFAULT_SKILLS);
 
-  return Object.freeze({ tools, subAgents, skills });
+  return Object.freeze({ tools, subAgents, skills, disabledTools });
 }
 
 let sessionSet: EnabledSet | null = null;

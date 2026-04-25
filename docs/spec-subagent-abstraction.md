@@ -4,6 +4,8 @@
 **Author**: Bytes  
 **Date**: 2026-04-20
 
+> **Phase 1 implementation status (2026-04-25):** The internal refactor described in Phase 1 of this spec has landed. `SubAgentDeclaration`, `defineSubAgent()`, and the generic `registerSubAgent()` exist and are used by all four builtins. YAML loading (`loadYamlDeclarations()`) is live with skip-and-warn conflict handling. The hardcoded `disabled_sub_agents` enum has been replaced with `z.array(z.string())`. Key additions beyond the original spec: a canonical delegable-tool registry and `finalizeNestedTools` pipeline, an immutable per-agent config snapshot resolved at `session_start`, a general-agent safety overlay, idempotent session-state reset, YAML diagnostics surfaced in `/blackbytes-status`, and failure classification with secret redaction. Phase 2 and Phase 3 items remain open. `timeoutMs` per-agent config is not yet wired. Tool naming cleanup was handled separately (canonical names: `ast_search`, `ast_replace`, `web_search`, `web_fetch`, `docs_resolve`, `docs_query`, `gh_search`).
+
 ## Problem
 
 The current subagent system has four hardcoded agents (`explore`, `oracle`, `librarian`, `general`), each implemented as a separate file repeating the same pattern: check enabled set → register tool → load `.md` prompt → call `runNestedPi()`. This creates several issues:
@@ -485,3 +487,19 @@ The following items came up during design but are intentionally excluded from th
 1. **Tool naming cleanup** — renaming extension tools (`websearch_*`, `context7_*`, etc.) should be handled in a separate spec because it is a user-visible surface change.
 2. **Capability documentation/examples** — richer guidance on recommended allowlist/denylist patterns for user-defined agents can be documented independently of the core declaration mechanism.
 3. **Explicit override semantics** — if we later want user declarations to intentionally replace builtins, add a dedicated opt-in mechanism rather than silent name shadowing.
+
+---
+
+> **Phase 2 implementation status (2026-04-25):** Phase 2 is complete. The five beads (pib-vyj.2.1–2.5) resolved as follows:
+>
+> - **pib-vyj.2.1 (timeoutMs)** — Landed. JSON `timeoutMs` and YAML `timeout_ms` accepted per-agent. Validated 1..3_600_000 ms. Passed as a runner option. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000. Surfaced in `/blackbytes-status`.
+>
+> - **pib-vyj.2.2 (promptMode schema)** — Landed. `promptMode?: "static" | "append"` on `SubAgentDeclaration`; YAML `prompt_mode`. Default static. `buildSystemPrompt()` throws fail-loud on `"append"` ("not yet supported"). All four builtins use implicit static.
+>
+> - **pib-vyj.2.3 (append for builtins)** — **Deferred.** No builtin opted into `promptMode: "append"`. Pi exposes no safe `parentContext` API from within a registered tool's execute closure. Re-evaluation criteria: Pi surfaces a documented `parentContext` / `inheritedInstructions` field, bounded in size, scoped to the parent's static system prompt only.
+>
+> - **pib-vyj.2.4 (conservative model fallback)** — Landed. JSON `fallbackModels: string[]` (max 5, unique, non-empty); YAML `fallback_models`. Eligible only for read-only agents (mutability not full-access, no `MUTATING_EXEC_TOOLS` in resolved allowlist). `general` is ineligible. Retries only `provider_or_model_unavailable`; never timed_out / cancelled / spawn_error / failed. Single shared timeout budget (1 s floor per attempt). Attempted-models chain appended to user-visible message. Fallback chain shown in `/blackbytes-status` with `→` separators; `(ineligible)` suffix when configured but ineligible.
+>
+> - **pib-vyj.2.5 (streaming/progress)** — **Deferred.** Live streaming of nested sub-agent stdout into the parent TUI is intentionally not wired. Reasons: raw stdout is too verbose, no chunk-level secret redaction, violates the "do not dump nested stdout into parent context" design constraint. Becomes supportable when Pi exposes a structured progress surface with chunk-level redaction.
+>
+> **Deferred to Phase 3:** parallel fanout, background task lifecycle, worktree isolation, persistent agent memory, streaming progress, append prompt mode.

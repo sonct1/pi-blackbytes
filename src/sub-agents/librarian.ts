@@ -79,5 +79,9 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
     TOOL_NAMES.DOCS_QUERY,
     TOOL_NAMES.GH_SEARCH,
   ],
+  mutability: "read-only",
+  finalizeMode: "strict",
+  source: "builtin",
+  staticOverrides: { timeoutMs: 240_000 },
   buildUserPrompt: (p) => p.question,
 });

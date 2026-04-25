@@ -203,7 +203,7 @@ describe("registerSubAgent", () => {
     await tool.execute("test-call", { question: "test" });
 
     const tools = extractAllowedTools(capturedArgs);
-    assert.deepEqual(tools, ["read", "grep", "glob", "ast_search"]);
+    assert.deepEqual(tools, ["ast_search", "glob", "grep", "read"]);
   });
 
   it("passes tool execution cwd to nested Pi", async () => {
@@ -248,7 +248,7 @@ describe("registerSubAgent", () => {
     await tool.execute("test-call", { task: "find something" });
 
     const tools = extractAllowedTools(capturedArgs);
-    assert.deepEqual(tools, ["read", "grep"]);
+    assert.deepEqual(tools, ["grep", "read"]);
   });
 
   it("applies model overrides from resolveModelOverrides", async () => {
@@ -391,5 +391,366 @@ describe("registerSubAgent", () => {
     const spIdx = capturedArgs.indexOf("--system-prompt");
     assert.ok(spIdx >= 0, "should pass --system-prompt");
     assert.ok(capturedArgs[spIdx + 1]!.length > 0, "system prompt should not be empty");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// finalizeNestedTools wiring (acceptance criteria for canonical registry)
+// ---------------------------------------------------------------------------
+
+describe("registerSubAgent finalizer integration", () => {
+  it("builtin static path: throws on unknown name BEFORE generated args are built", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    let spawned = false;
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, () => {
+      spawned = true;
+    });
+
+    const badDecl = defineSubAgent<{ question: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "test",
+      parameters: Type.Object({ question: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read", "definitely_not_a_tool"],
+      mutability: "read-only",
+      finalizeMode: "strict",
+      buildUserPrompt: (p) => p.question,
+    });
+
+    registerSubAgent(pi, badDecl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    const result = await tool.execute("test-call", { question: "q" });
+    const text = result.content[0].text as string;
+    assert.match(text, /Unknown or delegate tool names/);
+    assert.match(text, /failed before nested Pi execution/);
+    assert.equal(spawned, false, "runNestedPi must not spawn when finalizer rejects");
+  });
+
+  it("builtin static path: rejects delegate_* in declared allowlist", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 });
+
+    const badDecl = defineSubAgent<{ question: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "test",
+      parameters: Type.Object({ question: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read", "delegate_oracle"],
+      mutability: "read-only",
+      finalizeMode: "strict",
+      buildUserPrompt: (p) => p.question,
+    });
+
+    registerSubAgent(pi, badDecl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    const result = await tool.execute("test-call", { question: "q" });
+    const text = result.content[0].text as string;
+    assert.match(text, /delegate_oracle/);
+    assert.match(text, /failed before nested Pi execution/);
+  });
+
+  it("builtin static path: applies global disabled_tools to declared allowlist", async () => {
+    initEnabledSet({ ...defaultConfig, disabled_tools: ["glob", "ast_search"] });
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    const decl = defineSubAgent<{ question: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "test",
+      parameters: Type.Object({ question: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read", "grep", "glob", "ast_search"],
+      mutability: "read-only",
+      finalizeMode: "strict",
+      buildUserPrompt: (p) => p.question,
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("test-call", { question: "q" });
+    assert.deepEqual(extractAllowedTools(capturedArgs), ["grep", "read"]);
+  });
+
+  it("dynamic broad path: filters delegate_* and applies global disabled_tools", async () => {
+    initEnabledSet({ ...defaultConfig, disabled_tools: ["hashline_edit"] });
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    // Simulates a broad dynamic resolver that returns extension+Pi tools
+    // and accidentally includes delegate_* and a disabled tool.
+    const decl = defineSubAgent<{ task: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "dyn",
+      parameters: Type.Object({ task: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: () => ["read", "grep", "glob", "hashline_edit", "delegate_oracle"],
+      mutability: "full-access",
+      finalizeMode: "lenient",
+      buildUserPrompt: (p) => p.task,
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("test-call", { task: "t" });
+    const tools = extractAllowedTools(capturedArgs);
+    assert.deepEqual(tools, ["glob", "grep", "read"]);
+    assert.ok(!tools.some((t) => t.startsWith("delegate_")), "delegate_* leaked");
+    assert.ok(!tools.includes("hashline_edit"), "globally disabled tool leaked");
+  });
+
+  it("YAML allowlist path: lenient finalizer drops unknown + applies global disable + sorts", async () => {
+    initEnabledSet({ ...defaultConfig, disabled_tools: ["web_search"] }, ["yaml_agent"]);
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    // Mirrors what loader.ts produces for `allowed_tools: [...]`:
+    //  - static array allowedTools
+    //  - mutability: 'read-only'
+    //  - finalizeMode: 'lenient'
+    const decl = defineSubAgent<{ prompt: string }>({
+      name: "yaml_agent",
+      toolName: "delegate_yaml_agent",
+      description: "yaml",
+      parameters: Type.Object({ prompt: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read", "grep", "web_search", "unknown_tool", "delegate_x"],
+      mutability: "read-only",
+      finalizeMode: "lenient",
+      buildUserPrompt: (p) => p.prompt,
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_yaml_agent")!;
+    await tool.execute("test-call", { prompt: "q" });
+    const tools = extractAllowedTools(capturedArgs);
+    assert.deepEqual(tools, ["grep", "read"]);
+  });
+
+  it("YAML denylist path: lenient finalizer applies global disable on top", async () => {
+    _resetEnabledSet();
+    initEnabledSet({ ...defaultConfig, disabled_tools: ["glob"] }, ["yaml_agent"]);
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    // Mirrors `denied_tools: ['web_search']` -> dynamic resolver
+    // returning enabledTools ∪ PI_DEFAULT_TOOLS minus denied minus delegate_*.
+    const decl = defineSubAgent<{ prompt: string }>({
+      name: "yaml_agent",
+      toolName: "delegate_yaml_agent",
+      description: "yaml denylist",
+      parameters: Type.Object({ prompt: Type.String() }),
+      systemPrompt: "x",
+      // The actual loader uses resolveToolStrategy(); for this test we simulate
+      // the pre-finalizer output directly.
+      allowedTools: () => ["read", "grep", "glob", "ast_search"],
+      mutability: "read-only",
+      finalizeMode: "lenient",
+      buildUserPrompt: (p) => p.prompt,
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_yaml_agent")!;
+    await tool.execute("test-call", { prompt: "q" });
+    const tools = extractAllowedTools(capturedArgs);
+    // glob is globally disabled.
+    assert.deepEqual(tools, ["ast_search", "grep", "read"]);
+    assert.ok(!tools.some((t) => t.startsWith("delegate_")));
+  });
+
+  it("read-only mutability strips mutating tools even when explicitly listed", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    const decl = defineSubAgent<{ q: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      // Lenient so finalizer drops mutating instead of throwing on the strict-only
+      // "unknown" path. Mutating tools are never in the unknown bucket; they are
+      // dropped by mutability. Either mode demonstrates the strip behavior.
+      allowedTools: ["read", "write", "bash", "hashline_edit", "ast_replace"],
+      mutability: "read-only",
+      finalizeMode: "lenient",
+      buildUserPrompt: (p) => p.q,
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("test-call", { q: "q" });
+    assert.deepEqual(extractAllowedTools(capturedArgs), ["read"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// general sub-agent broad allowlist + safety overlay (AC #1, AC #4)
+// ---------------------------------------------------------------------------
+
+describe("general sub-agent", () => {
+  it("--tools includes Pi built-ins + extension tools, excludes delegate_*, respects globalDisabled", async () => {
+    initEnabledSet({ ...defaultConfig, disabled_tools: ["web_search"] });
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    // Use the actual general declaration
+    const generalModule = await import("../general.js");
+    registerSubAgent(pi, generalModule.generalDeclaration, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_general")!;
+    await tool.execute("test-call", { task: "do a thing" });
+
+    const tools = extractAllowedTools(capturedArgs);
+    // Pi built-ins must be present.
+    for (const builtin of ["read", "bash", "edit", "write"]) {
+      assert.ok(tools.includes(builtin), `Pi built-in ${builtin} must be present`);
+    }
+    // Extension tools must be present.
+    assert.ok(tools.includes("hashline_edit"), "extension tool must be present");
+    // No delegate_*.
+    assert.ok(!tools.some((t) => t.startsWith("delegate_")), "delegate_* must not leak");
+    // Globally disabled tool excluded.
+    assert.ok(!tools.includes("web_search"), "globally disabled tool must be filtered");
+  });
+
+  it("system prompt includes the safety overlay header when broad tools are passed", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    const generalModule = await import("../general.js");
+    const overlayModule = await import("../general-safety-overlay.js");
+    registerSubAgent(pi, generalModule.generalDeclaration, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_general")!;
+    await tool.execute("test-call", { task: "go" });
+
+    const spIdx = capturedArgs.indexOf("--system-prompt");
+    assert.ok(spIdx >= 0, "--system-prompt must be passed");
+    const sp = capturedArgs[spIdx + 1] ?? "";
+    assert.ok(
+      sp.includes(overlayModule.GENERAL_SAFETY_OVERLAY_HEADER),
+      "safety overlay header must appear in general's system prompt",
+    );
+    assert.ok(
+      sp.includes(overlayModule.GENERAL_SAFETY_OVERLAY_FOOTER),
+      "safety overlay footer must appear in general's system prompt",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-agent snapshot drives model/reasoning resolution (bead pib-vyj.1.5)
+// ---------------------------------------------------------------------------
+
+describe("registerSubAgent snapshot integration", () => {
+  it("reads model + reasoningEffort from the active session snapshot", async () => {
+    const { _resetAgentSnapshot, initAgentSnapshot } = await import("../snapshot.js");
+    initEnabledSet(defaultConfig);
+    _resetAgentSnapshot();
+
+    const decl = defineSubAgent<{ q: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      mutability: "read-only",
+      finalizeMode: "strict",
+      source: "builtin",
+      // Declaration default — should be overridden by snapshot below.
+      staticOverrides: { model: "decl-model", reasoningEffort: "low" },
+      buildUserPrompt: (p) => p.q,
+    });
+
+    initAgentSnapshot([decl], {
+      ...defaultConfig,
+      sub_agents: { explore: { model: "snap-model", reasoningEffort: "high" } },
+    });
+
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("call-1", { q: "q" });
+
+    const modelIdx = capturedArgs.indexOf("--model");
+    const thinkingIdx = capturedArgs.indexOf("--thinking");
+    assert.ok(modelIdx >= 0, "--model should be passed");
+    assert.equal(capturedArgs[modelIdx + 1], "snap-model");
+    assert.ok(thinkingIdx >= 0, "--thinking should be passed");
+    assert.equal(capturedArgs[thinkingIdx + 1], "high");
+  });
+
+  it("snapshot is the source of truth even if config disk-state changes after startup", async () => {
+    const { _resetAgentSnapshot, initAgentSnapshot } = await import("../snapshot.js");
+    initEnabledSet(defaultConfig);
+    _resetAgentSnapshot();
+
+    const decl = defineSubAgent<{ q: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      mutability: "read-only",
+      finalizeMode: "strict",
+      source: "builtin",
+      buildUserPrompt: (p) => p.q,
+    });
+
+    const config: BlackbytesConfig = {
+      ...defaultConfig,
+      sub_agents: { explore: { model: "frozen-model" } },
+    };
+    initAgentSnapshot([decl], config);
+
+    // Simulate disk mutation after session_start finished.
+    config.sub_agents = { explore: { model: "mutated-after-startup" } };
+
+    const pi = makeFakePi();
+    let capturedArgs: string[] = [];
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, (args) => {
+      capturedArgs = args;
+    });
+
+    registerSubAgent(pi, decl, { spawnFn });
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("call-frozen", { q: "q" });
+
+    const modelIdx = capturedArgs.indexOf("--model");
+    assert.equal(capturedArgs[modelIdx + 1], "frozen-model", "snapshot must remain stable");
   });
 });

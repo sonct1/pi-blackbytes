@@ -58,5 +58,9 @@ export const exploreDeclaration = defineSubAgent<{ question: string }>({
   }),
   systemPrompt: EXPLORE_SYSTEM_PROMPT,
   allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
+  mutability: "read-only",
+  finalizeMode: "strict",
+  source: "builtin",
+  staticOverrides: { timeoutMs: 120_000 },
   buildUserPrompt: (p) => p.question,
 });

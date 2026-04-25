@@ -21,11 +21,38 @@ export const BlackbytesConfigSchema = z
     sub_agents: z
       .record(
         z.string(),
-        z.object({
-          model: z.string().optional(),
-          reasoningEffort: z.string().optional(),
-          temperature: z.number().optional(),
-        }),
+        z
+          .object({
+            model: z.string().optional(),
+            reasoningEffort: z.string().optional(),
+            timeoutMs: z
+              .number()
+              .int("timeoutMs must be an integer")
+              .positive("timeoutMs must be positive")
+              .max(3_600_000, "timeoutMs must not exceed 3600000 (1 hour)")
+              .optional(),
+            fallbackModels: z
+              .array(z.string().min(1, "fallbackModels entries must be non-empty strings"))
+              .max(5, "fallbackModels must not exceed 5 entries")
+              .refine((arr) => new Set(arr).size === arr.length, {
+                message: "fallbackModels must not contain duplicate entries",
+              })
+              .optional(),
+            // RESERVED / UNSUPPORTED
+            // ----------------------
+            // The nested Pi CLI does not currently accept a `--temperature` flag
+            // (see PI_CLI_COMPATIBILITY_EVIDENCE in src/sub-agents/__tests__/runner.test.ts).
+            // We accept and preserve `temperature` here so existing user settings
+            // do not throw, but it is intentionally NOT threaded through to the runner.
+            // `/blackbytes-status` surfaces any configured value as reserved/unsupported.
+            temperature: z.number().optional(),
+            promptMode: z.enum(["static", "append"]).optional(),
+          })
+          // Preserve any additional, currently-unknown per-agent fields so we
+          // never silently strip user config. New runtime-supported fields can
+          // be promoted to typed properties later without breaking forward-
+          // compatible config files.
+          .passthrough(),
       )
       .optional(),
   })

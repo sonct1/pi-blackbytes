@@ -2,7 +2,8 @@ import { Type } from "@sinclair/typebox";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
-import { resolveToolStrategy } from "./delegable-tools.js";
+import { PI_BUILTIN_TOOLS, resolveToolStrategy } from "./delegable-tools.js";
+import { buildGeneralSafetyOverlay } from "./general-safety-overlay.js";
 
 const GENERAL_SYSTEM_PROMPT = `# General — Sub-Agent Persona (Implementation Executor)
 
@@ -90,7 +91,20 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
     ),
   }),
   systemPrompt: GENERAL_SYSTEM_PROMPT,
-  allowedTools: () => resolveToolStrategy({ kind: "all-except-delegates" }, getEnabledSet().tools),
+  allowedTools: () => [
+    ...resolveToolStrategy({ kind: "all-except-delegates" }, getEnabledSet().tools),
+    ...PI_BUILTIN_TOOLS,
+  ],
+  mutability: "full-access",
+  finalizeMode: "strict",
+  source: "builtin",
+  staticOverrides: { timeoutMs: 600_000 },
+  prependSystemPrompt: ({ cwd, finalizedTools }) =>
+    buildGeneralSafetyOverlay({
+      cwd,
+      enabledSet: getEnabledSet(),
+      finalizedTools,
+    }),
   buildUserPrompt: (p) =>
     p.context ? `${p.task}\n\n---\n\nAdditional context:\n${p.context}` : p.task,
 });

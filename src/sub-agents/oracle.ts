@@ -1,5 +1,4 @@
 import { Type } from "@sinclair/typebox";
-import { loadBlackbytesConfig } from "../config/loader.js";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 
@@ -75,14 +74,10 @@ export const oracleDeclaration = defineSubAgent<{
   }),
   systemPrompt: ORACLE_SYSTEM_PROMPT,
   allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
+  mutability: "read-only",
+  finalizeMode: "strict",
   buildUserPrompt: (p) =>
     p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
-  resolveModelOverrides: async () => {
-    const config = await loadBlackbytesConfig();
-    const overrides = config.sub_agents?.oracle ?? {};
-    return {
-      model: overrides.model,
-      reasoningEffort: overrides.reasoningEffort ?? "high",
-    };
-  },
+  staticOverrides: { reasoningEffort: "high", timeoutMs: 300_000 },
+  source: "builtin",
 });

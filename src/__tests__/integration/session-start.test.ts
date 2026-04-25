@@ -208,8 +208,8 @@ describe("integration: session_start with YAML sub-agents", () => {
     assert.equal(enabledSet.subAgents.has("explore"), true);
   });
 
-  it("aborts on duplicate name between YAML and builtin", async () => {
-    // 'explore' is a builtin name — YAML agent with same name should cause error
+  it("skips YAML file with duplicate builtin name (no crash, no conflict in enabledSet)", async () => {
+    // 'explore' is a builtin name — YAML agent with same name should be skipped with diagnostics
     const dupeYaml = [
       "name: explore",
       "description: Duplicate of builtin",
@@ -218,18 +218,21 @@ describe("integration: session_start with YAML sub-agents", () => {
 
     const { mock } = await setupWithYaml({ "explore.yaml": dupeYaml });
 
-    // session_start should throw (caught by bootstrap's wrap, but assertUniqueNames throws)
-    // We need to test that the enabled set is NOT initialized
+    // session_start should succeed — the YAML is silently skipped with diagnostics
     mock.emit("session_start", {});
+    await waitForEnabledSet();
 
-    // The handler throws, so enabled-set should never be initialized
-    // Wait a bit then verify it's not set
-    await new Promise<void>((r) => setTimeout(r, 200));
-    assert.throws(
-      () => getEnabledSet(),
-      /not initialized/,
-      "EnabledSet should not be initialized when duplicate names detected",
-    );
+    const enabledSet = getEnabledSet();
+    // Builtin explore is still present
+    assert.equal(enabledSet.subAgents.has("explore"), true, "builtin explore must remain present");
+
+    // Verify YAML diagnostics recorded the skip
+    const { getYamlDiagnostics } = await import("../../sub-agents/diagnostics.js");
+    const diag = getYamlDiagnostics();
+    assert.ok(diag !== undefined, "diagnostics must be set");
+    const skipped = diag!.skippedFiles.find((s) => s.file === "explore.yaml");
+    assert.ok(skipped !== undefined, "explore.yaml must be in skippedFiles");
+    assert.ok(skipped!.conflictWith?.source === "builtin", "conflict source must be builtin");
   });
 
   it("disables a YAML agent through config disabled_sub_agents", async () => {
@@ -249,5 +252,105 @@ describe("integration: session_start with YAML sub-agents", () => {
     );
     // Builtins should still be present
     assert.equal(enabledSet.subAgents.has("explore"), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Idempotent startup (bead pib-vyj.1.7)
+// ---------------------------------------------------------------------------
+
+describe("integration: session_start idempotency", () => {
+  let tmpDir: string;
+  const originalAgentDir = process.env.PI_AGENT_DIR;
+
+  afterEach(async () => {
+    _resetEnabledSet();
+    _resetSubAgentRegistry();
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_AGENT_DIR;
+    } else {
+      process.env.PI_AGENT_DIR = originalAgentDir;
+    }
+    if (tmpDir) {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("two consecutive session_start calls in the same process do not throw", async () => {
+    tmpDir = await makeTempDir();
+    await writeSettings(tmpDir, JSON.stringify({ blackbytes: { disabled_tools: ["grep"] } }));
+    process.env.PI_AGENT_DIR = tmpDir;
+    const mock = createMockPi();
+    bootstrap(mock);
+
+    // First startup
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+    const first = getEnabledSet();
+    assert.equal(first.tools.has("grep"), false);
+
+    // Mutate disk: enable grep again, disable glob.
+    await writeSettings(tmpDir, JSON.stringify({ blackbytes: { disabled_tools: ["glob"] } }));
+
+    // Second startup must succeed (no "already initialized", no duplicate
+    // sub-agent metadata, no stale registry).
+    mock.emit("session_start", {});
+    // Allow second startup to complete.
+    await new Promise<void>((r) => setTimeout(r, 300));
+    const second = getEnabledSet();
+    assert.equal(second.tools.has("grep"), true, "grep should be re-enabled by new config");
+    assert.equal(second.tools.has("glob"), false, "glob should now be disabled");
+  });
+
+  it("second startup does not duplicate sub-agent metadata", async () => {
+    tmpDir = await makeTempDir();
+    await writeSettings(tmpDir, JSON.stringify({ blackbytes: {} }));
+    process.env.PI_AGENT_DIR = tmpDir;
+    const mock = createMockPi();
+    bootstrap(mock);
+
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+    const { getRegisteredSubAgents } = await import("../../config/resource-metadata.js");
+    const firstCount = getRegisteredSubAgents().length;
+    assert.ok(firstCount >= 4, "builtin agents must be registered");
+
+    mock.emit("session_start", {});
+    await new Promise<void>((r) => setTimeout(r, 300));
+    const secondCount = getRegisteredSubAgents().length;
+    assert.equal(secondCount, firstCount, "registry must not duplicate after second startup");
+  });
+
+  it("second startup does not duplicate sub-agent metadata when YAML has duplicate builtin name", async () => {
+    // First startup: duplicate-name YAML is skipped (no longer throws).
+    tmpDir = await makeTempDir();
+    const subAgentsDir = path.join(tmpDir, "sub-agents");
+    await fs.mkdir(subAgentsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(subAgentsDir, "explore.yaml"),
+      [
+        "name: explore",
+        "description: Duplicate of builtin",
+        "system_prompt: I will conflict.",
+      ].join("\n"),
+      "utf8",
+    );
+    await writeSettings(tmpDir, JSON.stringify({ blackbytes: {} }));
+    process.env.PI_AGENT_DIR = tmpDir;
+    const mock = createMockPi();
+    bootstrap(mock);
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+    // Session starts fine — YAML explore is skipped with diagnostics
+    const set = getEnabledSet();
+    assert.equal(set.subAgents.has("explore"), true, "builtin explore should be present");
+
+    // Second startup should also succeed without duplicating registry
+    mock.emit("session_start", {});
+    await new Promise<void>((r) => setTimeout(r, 300));
+    const { getRegisteredSubAgents } = await import("../../config/resource-metadata.js");
+    const names = getRegisteredSubAgents().map((a) => a.name);
+    const dupCount = names.filter((n) => n === "explore").length;
+    assert.equal(dupCount, 1, "second startup must not leave a duplicate 'explore' meta entry");
   });
 });

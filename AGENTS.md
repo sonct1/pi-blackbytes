@@ -1,6 +1,6 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces the websearch, context7, and grep.app MCP surfaces with direct HTTP tools, adds bundled local tools (`hashline_edit`, `ast_grep_search`, `ast_grep_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`).
+Pi coding-agent extension that replaces the websearch, context7, and grep.app MCP surfaces with direct HTTP tools, adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`).
 
 ## Commands
 
@@ -56,11 +56,11 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
 3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
 
-**User-defined sub-agents** are loaded automatically from YAML files via `loadYamlDeclarations()`. Duplicate names (across builtins + YAML) are rejected at startup.
+**User-defined sub-agents** are loaded from YAML files in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` via `loadYamlDeclarations()`. Conflicts with builtins or earlier YAML files in the same directory are skipped with a diagnostic (not fatal); `/blackbytes-status` surfaces all skipped files and reasons.
 
 ### Tool name conventions
 
-Tool names use `snake_case` everywhere (for example `websearch_search`, `context7_resolve_library_id`, `grep_app_search_github`). Public tool names must match across:
+Tool names use `snake_case` everywhere (for example `web_search`, `docs_resolve`, `gh_search`). Public tool names must match across:
 
 - the registration function
 - `src/config/resource-metadata.ts`
@@ -80,7 +80,10 @@ Core settings:
 - `context7.api_key`
 - `sub_agents.<name>.model`
 - `sub_agents.<name>.reasoningEffort`
-- `sub_agents.<name>.temperature`
+- `sub_agents.<name>.timeoutMs` (per-agent timeout, 1..3600000 ms; YAML uses `timeout_ms`. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000)
+- `sub_agents.<name>.fallbackModels` (read-only agents only; string[], max 5, unique, non-empty; YAML uses `fallback_models`. `general` and mutating YAML agents are ineligible)
+- `sub_agents.<name>.promptMode` (RESERVED — `"static"` is the only safe value; `"append"` throws at runtime ("not yet supported"); YAML uses `prompt_mode`)
+- `sub_agents.<name>.temperature` (RESERVED — accepted by schema for forward-compat but NOT passed to the nested Pi CLI; see `/blackbytes-status`)
 
 The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes` object are preserved.
 

@@ -68,4 +68,41 @@ describe("BlackbytesConfigSchema", () => {
       assert.deepEqual(result.value.disabled_sub_agents, ["custom_yaml_agent", "explore"]);
     }
   });
+
+  it("preserves unknown nested per-agent fields (passthrough)", () => {
+    // Forward-compat guarantee: the per-agent inner schema must not strip
+    // unknown keys. This protects user settings from silent loss when a
+    // future-supported field is configured before the runtime supports it.
+    const result = parseBlackbytesConfig({
+      sub_agents: {
+        myAgent: {
+          model: "gpt-4o",
+          // intentionally unknown — must be preserved verbatim
+          custom_future_field: { nested: true },
+          another_unknown: 42,
+        },
+      },
+    });
+    assert.ok(result.ok);
+    if (result.ok) {
+      const agent = result.value.sub_agents?.myAgent as Record<string, unknown> | undefined;
+      assert.ok(agent, "agent entry should be preserved");
+      assert.equal(agent?.model, "gpt-4o");
+      assert.deepEqual(agent?.custom_future_field, { nested: true });
+      assert.equal(agent?.another_unknown, 42);
+    }
+  });
+
+  it("accepts temperature as a reserved/unsupported field without runtime threading", () => {
+    // The CLI does not accept --temperature today (PI_CLI_COMPATIBILITY_EVIDENCE).
+    // The schema must continue to accept it so existing user configs do not break;
+    // the runner separately guarantees the flag is never emitted.
+    const result = parseBlackbytesConfig({
+      sub_agents: { myAgent: { temperature: 0.42 } },
+    });
+    assert.ok(result.ok);
+    if (result.ok) {
+      assert.equal(result.value.sub_agents?.myAgent?.temperature, 0.42);
+    }
+  });
 });

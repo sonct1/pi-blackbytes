@@ -128,7 +128,7 @@ const testDecl = defineSubAgent<{ question: string }>({
   parameters: Type.Object({
     question: Type.String({ description: "The question" }),
   }),
-  systemPromptPath: "prompts/explore.md",
+  systemPrompt: "Test system prompt",
   allowedTools: ["read", "grep", "glob", "ast_search"],
   buildUserPrompt: (p) => p.question,
 });
@@ -237,7 +237,7 @@ describe("registerSubAgent", () => {
       toolName: "delegate_explore",
       description: "dynamic test",
       parameters: Type.Object({ task: Type.String() }),
-      systemPromptPath: "prompts/explore.md",
+      systemPrompt: "Test system prompt",
       allowedTools: () => ["read", "grep"],
       buildUserPrompt: (p) => p.task,
     });
@@ -264,7 +264,7 @@ describe("registerSubAgent", () => {
       toolName: "delegate_explore",
       description: "with overrides",
       parameters: Type.Object({ question: Type.String() }),
-      systemPromptPath: "prompts/explore.md",
+      systemPrompt: "Test system prompt",
       allowedTools: ["read"],
       buildUserPrompt: (p) => p.question,
       resolveModelOverrides: () => ({ model: "o3", reasoningEffort: "high" }),
@@ -293,7 +293,7 @@ describe("registerSubAgent", () => {
       toolName: "delegate_explore",
       description: "with async overrides",
       parameters: Type.Object({ question: Type.String() }),
-      systemPromptPath: "prompts/explore.md",
+      systemPrompt: "Test system prompt",
       allowedTools: ["read"],
       buildUserPrompt: (p) => p.question,
       resolveModelOverrides: async () => ({
@@ -482,7 +482,7 @@ describe("registerSubAgent", () => {
     assert.match(result.content[0].text, /Error:.*recursion/);
   });
 
-  it("reads system prompt from declaration path", async () => {
+  it("passes inline system prompt from declaration", async () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
     let capturedArgs: string[] = [];
@@ -495,10 +495,32 @@ describe("registerSubAgent", () => {
     const tool = pi.registeredTools.get("delegate_explore")!;
     await tool.execute("test-call", { question: "test" });
 
-    // --system-prompt should be passed with non-empty content
+    // --system-prompt should be passed with the declaration content.
     const spIdx = capturedArgs.indexOf("--system-prompt");
     assert.ok(spIdx >= 0, "should pass --system-prompt");
-    assert.ok(capturedArgs[spIdx + 1]!.length > 0, "system prompt should not be empty");
+    assert.equal(capturedArgs[spIdx + 1], "Test system prompt");
+  });
+
+  it("returns controlled error when system prompt is empty", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    let spawned = false;
+    const spawnFn = makeCapturingSpawnFn({ stdoutData: "ok", exitCode: 0 }, () => {
+      spawned = true;
+    });
+
+    const emptyPromptDecl = defineSubAgent<{ question: string }>({
+      ...testDecl,
+      systemPrompt: "   ",
+    });
+
+    registerSubAgent(pi, emptyPromptDecl, { spawnFn });
+
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    const result = await tool.execute("test-call", { question: "test" });
+
+    assert.equal(spawned, false);
+    assert.match(result.content[0].text, /empty systemPrompt/);
   });
 });
 

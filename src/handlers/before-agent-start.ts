@@ -1,8 +1,8 @@
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getRegisteredSubAgents } from "../config/resource-metadata.js";
-import { createBytesPromptRenderContext } from "../prompts/bytes/shared.js";
-import { renderBytesPrompt } from "../prompts/loader.js";
 import { resolvePromptModelFamily } from "../shared/model-capability.js";
+import { createBytesPromptRenderContext } from "../system-prompt/bytes/shared.js";
+import { renderBytesPrompt } from "../system-prompt/loader.js";
 
 // ---------------------------------------------------------------------------
 // Constants

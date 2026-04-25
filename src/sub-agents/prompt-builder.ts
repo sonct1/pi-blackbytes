@@ -40,7 +40,7 @@ import type { SubAgentDeclaration } from "./declaration.js";
 // ---------------------------------------------------------------------------
 
 export interface BuildSystemPromptOptions {
-  /** The pre-resolved base system prompt (inline or loaded from file). */
+  /** The pre-resolved base system prompt from `declaration.systemPrompt`. */
   readonly basePrompt: string;
   /** The declaration driving the assembly. */
   readonly declaration: Pick<SubAgentDeclaration, "name" | "promptMode">;
@@ -53,8 +53,7 @@ export interface BuildSystemPromptOptions {
 /**
  * Assemble the final system prompt string for a nested Pi invocation.
  *
- * @param opts.basePrompt  The resolved base prompt (verbatim from
- *   `declaration.systemPrompt` or the loaded prompt file).
+ * @param opts.basePrompt  The resolved base prompt (verbatim from `declaration.systemPrompt`).
  * @param opts.declaration The sub-agent declaration (only `name` and
  *   `promptMode` are consumed here).
  * @returns The assembled system prompt string.

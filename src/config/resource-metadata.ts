@@ -1,7 +1,7 @@
 // Shared resource metadata — single source of truth for enabled-set filtering
 // and prompt/resource injection.
 
-import type { PromptFeatureFlags } from "../prompts/bytes/types.js";
+import type { PromptFeatureFlags } from "../system-prompt/bytes/types.js";
 
 export type PromptFeatureKey = keyof PromptFeatureFlags;
 

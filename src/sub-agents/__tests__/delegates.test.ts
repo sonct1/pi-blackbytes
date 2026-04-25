@@ -146,10 +146,7 @@ describe("builtin declaration contracts", () => {
     });
 
     it(`${decl.name}: has a system prompt`, () => {
-      assert.ok(
-        decl.systemPrompt || decl.systemPromptPath,
-        "must have systemPrompt or systemPromptPath",
-      );
+      assert.ok(decl.systemPrompt.length > 0, "must have systemPrompt");
     });
 
     it(`${decl.name}: has allowedTools`, () => {

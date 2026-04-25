@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getLogger } from "../shared/logger.js";
@@ -12,8 +9,6 @@ import { buildSubAgentRenderResult } from "./render.js";
 import { type SpawnFn, formatDelegateFailure, redactDelegateText, runNestedPi } from "./runner.js";
 import { getAgentSnapshotFor } from "./snapshot.js";
 import type { PiSessionEvent } from "./types.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 type SubAgentProgressStatus =
   | "starting"
@@ -261,8 +256,8 @@ export interface RegisterSubAgentOptions {
  * Skips registration silently when the agent is not in the enabled set.
  *
  * This is the generic replacement for per-agent `registerDelegate*Tool()`
- * functions. It reads the system prompt, resolves allowed tools and model
- * overrides from the declaration, then delegates to `runNestedPi()`.
+ * functions. It resolves prompts, tools, and model overrides from the
+ * declaration, then delegates to `runNestedPi()`.
  */
 export function registerSubAgent(
   pi: ExtensionAPI,
@@ -288,16 +283,9 @@ export function registerSubAgent(
       ctx?: { cwd?: string },
     ) => {
       try {
-        const baseSystemPrompt =
-          declaration.systemPrompt ??
-          (declaration.systemPromptPath
-            ? await readFile(join(__dirname, "..", declaration.systemPromptPath), "utf-8")
-            : undefined);
-
-        if (!baseSystemPrompt) {
-          throw new Error(
-            `Sub-agent "${declaration.name}" has neither systemPrompt nor systemPromptPath`,
-          );
+        const baseSystemPrompt = declaration.systemPrompt;
+        if (baseSystemPrompt.trim().length === 0) {
+          throw new Error(`Sub-agent "${declaration.name}" has an empty systemPrompt`);
         }
 
         // Resolve the per-agent snapshot up front so promptMode (which may
@@ -473,7 +461,7 @@ export function registerSubAgent(
           content: [{ type: "text" as const, text }],
         };
       } catch (err) {
-        // Convert any setup-time error (prompt load, prompt-builder append throw,
+        // Convert any setup-time error (empty prompt, prompt-builder append throw,
         // strict finalizer rejection, dynamic allowedTools throwing, snapshot lookup,
         // etc.) into a controlled tool result so the host never sees a raw throw.
         const message = err instanceof Error ? err.message : String(err);

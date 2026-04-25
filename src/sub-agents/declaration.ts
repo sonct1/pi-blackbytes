@@ -38,11 +38,8 @@ export interface SubAgentDeclaration<
   /** TypeBox parameter schema for the delegate tool. */
   readonly parameters: TObject;
 
-  /** Inline system-prompt text. Takes precedence over systemPromptPath. */
-  readonly systemPrompt?: string;
-
-  /** Path to the system-prompt file (resolved from the prompts directory). */
-  readonly systemPromptPath?: string;
+  /** System-prompt text passed to the nested Pi session. */
+  readonly systemPrompt: string;
 
   /** Static tool allowlist or a function that resolves it at execution time. */
   readonly allowedTools: AllowedToolsResolver;
@@ -97,7 +94,7 @@ export interface SubAgentDeclaration<
 
   /**
    * How the system prompt is assembled when passed to the nested Pi process.
-   * - `'static'` (default) — uses `systemPrompt` / `systemPromptPath` verbatim.
+   * - `'static'` (default) — uses `systemPrompt` verbatim.
    * - `'append'` — reserved for future use; append parent-session context before
    *   the sub-agent's own prompt. **Not yet supported.** Passing this value
    *   causes `buildSystemPrompt()` to throw at execution time so the caller

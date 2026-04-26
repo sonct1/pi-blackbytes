@@ -23,7 +23,7 @@
     "build:js": "bun build src/index.ts --outfile dist/index.js --target node --packages external",
     "build:types": "tsc --emitDeclarationOnly",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "test": "bash -c 'node --import tsx --test src/**/*.test.ts'",
     "lint": "biome check src/",
     "lint:fix": "biome check --fix src/",
     "format": "biome format --write src/",

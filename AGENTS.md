@@ -8,7 +8,7 @@ Pi coding-agent extension that replaces the websearch, context7, and grep.app MC
 
 ```bash
 bun run build             # bun build src/index.ts -> dist/index.js (+ tsc --emitDeclarationOnly)
-bun run test              # node --import tsx --test 'src/**/*.test.ts'
+bun run test              # bash -c 'node --import tsx --test src/**/*.test.ts'
 bun run lint              # biome check src/
 bun run lint:fix          # biome check --fix src/
 bun run format            # biome format --write src/

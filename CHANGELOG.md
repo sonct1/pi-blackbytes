@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.2 (2026-04-26)
+
+### Fixed
+
+- Package name in README title and install command reflects the current unscoped name (`pi-blackbytes`).
+- Removed non-existent `tool_description` field from YAML sub-agent example.
+- Listed all optional YAML fields (`model`, `reasoning_effort`, `timeout_ms`, `mutability`, `prompt_mode`, `fallback_models`) inline in README.
+- Added `reviewer=240000` to the documented `timeoutMs` builtin defaults in AGENTS.md.
+- Added `yaml` to the documented dependency list in AGENTS.md.
+- Added `bun run typecheck` to the documented development scripts in both README and AGENTS.md.
+- Removed stale `console.log` startup banner from `src/index.ts`.
+
 ## 0.2.1 (2026-04-26)
 
 ### Added

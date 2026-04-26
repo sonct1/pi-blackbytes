@@ -1,11 +1,11 @@
-# @blackbytes/pi-blackbytes
+# pi-blackbytes
 
 Pi coding-agent extension that provides local search tools, direct HTTP replacements for the websearch/context7/grep.app MCP surfaces, hashline-based editing, and delegated sub-agents for exploration, research, consultation, implementation, and code review.
 
 ## Installation
 
 ```bash
-pi install bun:@blackbytes/pi-blackbytes
+pi install bun:pi-blackbytes
 ```
 
 ## Quick start
@@ -138,13 +138,12 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 
 User-defined sub-agents can be placed in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` (defaulting to `~/.pi/agent/sub-agents/`). Each file must define `name`, `description`, and `system_prompt`. Tool access is optional via either `allowed_tools` or `denied_tools` (mutually exclusive); when neither is provided the agent receives the default read/search/docs tool set.
 
-Additional optional YAML fields:
+Additional optional YAML fields: `model`, `reasoning_effort`, `timeout_ms`, `mutability`, `prompt_mode`, `fallback_models`.
 
 ```yaml
 # ~/.pi/agent/sub-agents/deep-reviewer.yaml
 name: deep-reviewer
 description: Deep code review specialist
-tool_description: Launch a deep code review agent...
 allowed_tools:
   - read
   - grep
@@ -254,6 +253,7 @@ bun run lint
 bun run build
 bun run test
 
+bun run typecheck
 bun run lint:fix
 bun run format
 bun run bench:startup

@@ -39,6 +39,10 @@ describe("bytes overlay rendering", () => {
       assert.ok(prompt.includes("Documentation lookup may be available"));
       assert.ok(prompt.includes("Web lookup capabilities may be available"));
       assert.ok(prompt.includes("GitHub code search may be available"));
+      assert.ok(prompt.includes("Use `delegate_explore` for broad or unfamiliar"));
+      assert.ok(prompt.includes("Use `delegate_oracle` for hard architecture/debugging"));
+      assert.ok(prompt.includes("Use `delegate_general` only for well-scoped"));
+      assert.ok(prompt.includes("Use `delegate_reviewer` after significant implementation"));
     }
   });
 
@@ -58,6 +62,24 @@ describe("bytes overlay rendering", () => {
     assert.ok(!withoutLibrarian.includes('"tìm hiểu"'));
   });
 
+  it("renders sub-agent trigger guidance only for enabled sub-agents", () => {
+    const withReviewer = renderPrompt("claude", [], ["reviewer"]);
+    assert.ok(withReviewer.includes("Use `delegate_reviewer` after significant implementation"));
+    assert.ok(!withReviewer.includes("Use `delegate_oracle` for hard architecture/debugging"));
+
+    const withOracle = renderPrompt("claude", [], ["oracle"]);
+    assert.ok(withOracle.includes("Use `delegate_oracle` for hard architecture/debugging"));
+    assert.ok(!withOracle.includes("Use `delegate_reviewer` after significant implementation"));
+
+    const withExplore = renderPrompt("claude", [], ["explore"]);
+    assert.ok(withExplore.includes("Use `delegate_explore` for broad or unfamiliar"));
+    assert.ok(!withExplore.includes("Use `delegate_general` only for well-scoped"));
+
+    const withGeneral = renderPrompt("claude", [], ["general"]);
+    assert.ok(withGeneral.includes("Use `delegate_general` only for well-scoped"));
+    assert.ok(!withGeneral.includes("Use `delegate_explore` for broad or unfamiliar"));
+  });
+
   it("omits delegation guidance when sub-agents are unavailable", () => {
     const prompt = renderPrompt(
       "claude",
@@ -66,6 +88,10 @@ describe("bytes overlay rendering", () => {
     );
 
     assert.ok(!prompt.includes("Delegate when specialization materially reduces"));
+    assert.ok(!prompt.includes("Use `delegate_explore` for broad or unfamiliar"));
+    assert.ok(!prompt.includes("Use `delegate_oracle` for hard architecture/debugging"));
+    assert.ok(!prompt.includes("Use `delegate_general` only for well-scoped"));
+    assert.ok(!prompt.includes("Use `delegate_reviewer` after significant implementation"));
     assert.ok(prompt.includes("Hashline Edit Workflow"));
   });
 

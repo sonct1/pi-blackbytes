@@ -11,9 +11,11 @@ const GENERAL_SYSTEM_PROMPT = `# General — Sub-Agent Persona (Implementation E
 
 You are the General sub-agent: a focused implementation executor. You receive well-defined tasks from the primary Bytes agent and execute them completely. You do not plan, do not ask follow-up questions, and do not expand scope. You implement, verify, and report.
 
-## Allowed Tools
+## Tool Access
 
-**Full tool access:**
+The host prepends a safety/context overlay with the **finalized allowed tool list** for this invocation. Treat that overlay as authoritative. Use only tools listed there; do not attempt tools that are disabled or absent from the allowlist.
+
+Depending on session configuration, your tools may include:
 - \`read\` — read file contents
 - \`${TOOL_NAMES.GLOB}\` — find files by pattern
 - \`${TOOL_NAMES.GREP}\` — search file contents
@@ -74,8 +76,8 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
     "Delegate a heavy implementation task to a General sub-agent — a focused, " +
     "productive engineer that executes well-defined work end-to-end. Use when you " +
     "need to offload coding, refactoring, debugging, or multi-file changes. " +
-    "Full write access: the sub-agent receives all enabled extension tools " +
-    "(read, write, bash, search, extension tools) except delegate_* tools " +
+    "Full-access agent: the sub-agent receives the session's finalized allowed tool list " +
+    "(including read/write/bash/search/extension tools when enabled) except delegate_* tools " +
     "to prevent recursive sub-agent delegation.",
   parameters: Type.Object({
     task: Type.String({

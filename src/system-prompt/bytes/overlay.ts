@@ -65,6 +65,34 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
     );
   }
 
+  if (context.enabledSubAgents.has("explore")) {
+    lines.push(
+      "- Use `delegate_explore` for broad or unfamiliar codebase areas, cross-file discovery, " +
+        "or questions like where a behavior is implemented.",
+    );
+  }
+
+  if (context.enabledSubAgents.has("oracle")) {
+    lines.push(
+      "- Use `delegate_oracle` for hard architecture/debugging decisions, security or " +
+        "performance trade-offs, or after two failed fix attempts.",
+    );
+  }
+
+  if (context.enabledSubAgents.has("general")) {
+    lines.push(
+      "- Use `delegate_general` only for well-scoped multi-file implementation work after " +
+        "the desired behavior and file scope are clear.",
+    );
+  }
+
+  if (context.enabledSubAgents.has("reviewer")) {
+    lines.push(
+      "- Use `delegate_reviewer` after significant implementation, before commits/PRs, " +
+        "or when the user asks for review, fresh eyes, or a final check.",
+    );
+  }
+
   if (context.enabledSubAgents.has("librarian")) {
     lines.push(
       '- Treat user phrases like "research", "look up", "investigate", "tìm hiểu", ' +

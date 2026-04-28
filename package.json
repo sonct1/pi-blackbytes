@@ -27,13 +27,14 @@
     "build:js": "bun build src/index.ts --outfile dist/index.js --target node --packages external",
     "build:types": "tsc --emitDeclarationOnly",
     "typecheck": "tsc --noEmit",
-    "test": "bash -c 'node --import tsx --test src/**/*.test.ts'",
+    "test": "node scripts/run-tests.mjs",
     "lint": "biome check src/",
     "lint:fix": "biome check --fix src/",
     "format": "biome format --write src/",
     "bench:startup": "node --import tsx scripts/measure-startup.ts",
     "bench:tool-result": "node --import tsx scripts/measure-tool-result.ts",
-    "check:size": "bash scripts/check-size.sh"
+    "check:size": "bash scripts/check-size.sh",
+    "check": "bun run lint && bun run typecheck && bun run build && bun run test && bun run check:size"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.33",

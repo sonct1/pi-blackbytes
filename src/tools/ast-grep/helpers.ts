@@ -51,8 +51,14 @@ export function detectBinary(): BinaryResult | BinaryMissing {
   }
   return {
     found: false,
-    error:
-      "ast-grep binary not found. Install it with: cargo install ast-grep, or see https://ast-grep.github.io/guide/quick-start.html",
+    error: [
+      "ast-grep CLI not found on PATH. Tried: ast-grep, sg.",
+      "Install one of:",
+      "  brew install ast-grep",
+      "  cargo install ast-grep --locked",
+      "  npm install -g @ast-grep/cli",
+      "After installing, restart the Pi session so PATH is refreshed.",
+    ].join("\n"),
   };
 }
 

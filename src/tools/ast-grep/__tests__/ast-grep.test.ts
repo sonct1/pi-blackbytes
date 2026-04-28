@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it, mock } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import { _resetEnabledSet, initEnabledSet } from "../../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../../config/schema.js";
 import { registerAstGrepReplaceTool } from "../replace.js";
@@ -62,12 +62,11 @@ describe("ast_search tool", () => {
         pattern: "console.log($MSG)",
         lang: "javascript",
       });
-      // Should return an error about the missing binary
-      assert.ok(
-        result.isError === true ||
-          result.content[0].text.includes("not found") ||
-          result.content[0].text.includes("Error"),
-      );
+      const text = result.content[0].text;
+      assert.ok(result.isError === true || text.includes("Error"));
+      assert.ok(text.includes("ast-grep CLI not found on PATH"));
+      assert.ok(text.includes("Tried: ast-grep, sg"));
+      assert.ok(text.includes("restart the Pi session"));
     } finally {
       process.env.PATH = originalPath;
     }
@@ -143,11 +142,11 @@ describe("ast_replace tool", () => {
         lang: "javascript",
         dryRun: true,
       });
-      assert.ok(
-        result.isError === true ||
-          result.content[0].text.includes("not found") ||
-          result.content[0].text.includes("Error"),
-      );
+      const text = result.content[0].text;
+      assert.ok(result.isError === true || text.includes("Error"));
+      assert.ok(text.includes("ast-grep CLI not found on PATH"));
+      assert.ok(text.includes("Tried: ast-grep, sg"));
+      assert.ok(text.includes("restart the Pi session"));
     } finally {
       process.env.PATH = originalPath;
     }

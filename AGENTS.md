@@ -24,12 +24,13 @@ Run in order: `lint -> build -> test`.
 
 - `/setup-models` — interactive Pi-model-to-sub-agent mapping wizard
 - `/blackbytes-status` — print enabled resources and redacted config
+- `/toggle-verbose` — toggle compact vs expanded tool-result rendering
 
 ## Architecture
 
 ```text
-src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 2 commands:
-  session_start           -> loads config, computes enabled set, registers tools/sub-agents, sets up branding widget
+src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 3 commands:
+  session_start           -> loads config, computes enabled set, registers compact built-in renderers, tools/sub-agents, sets up branding widget
   before_agent_start      -> renders capability-aware Bytes v2 overlay + <available_resources>
   agent_start             -> captures Pi-effective system prompt to JSONL when system_prompt_log.enabled
   model_select            -> tracks current model family
@@ -39,6 +40,7 @@ src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 2 commands:
 
   /setup-models           -> interactive config wizard
   /blackbytes-status      -> current enabled resources + redacted config
+  /toggle-verbose         -> toggles compact/expanded tool output
 ```
 
 ### Registration flow (critical)
@@ -80,6 +82,7 @@ Core settings:
 - `disabled_tools` / `disabled_sub_agents`
 - `hashline_edit`
 - `copilot_initiator_header`
+- `compact_tools.enabled`, `compact_tools.default_expanded` (compact render wrappers for Pi built-in read/bash/edit/write/find/ls; `/toggle-verbose` toggles expansion)
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`
 - `system_prompt_log.enabled`, `.path`, `.capture_agent_start`, `.capture_provider_system`, `.include_nested`, `.dedupe` (opt-in JSONL capture of full system prompts; provider capture extracts only system-like fields)

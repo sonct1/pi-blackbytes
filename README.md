@@ -24,6 +24,7 @@ The wizard maps Blackbytes sub-agents to models that Pi already has available in
 |---|---|
 | `/setup-models` | Interactive mapping from Pi-available models to Blackbytes sub-agents (`blackbytes.sub_agents.<name>.model`) |
 | `/blackbytes-status` | Print enabled tools, enabled sub-agents, enabled skills, Sub-Agent Snapshot (model/reasoning/allowed tools per agent), YAML diagnostics, and the current redacted `blackbytes` config |
+| `/toggle-verbose` | Toggle compact vs expanded tool-result rendering during the current session |
 
 ## Prompt templates
 
@@ -47,6 +48,10 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
     "disabled_sub_agents": [],
     "hashline_edit": true,
     "copilot_initiator_header": true,
+    "compact_tools": {
+      "enabled": true,
+      "default_expanded": false
+    },
     "websearch": {
       "provider": "exa",
       "exa_api_key": "YOUR_EXA_KEY"
@@ -86,6 +91,8 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general" \| "reviewer")[]` | Disables delegate tools by agent name |
 | `hashline_edit` | `boolean` | Enables hashline rewriting for Pi `read`/`write` tool results |
 | `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `X-Initiator: agent` |
+| `compact_tools.enabled` | `boolean` | Registers compact renderers for Pi built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` results. Defaults to `true`. |
+| `compact_tools.default_expanded` | `boolean` | Initial tool-result expansion state when compact renderers are enabled. `false` means compact by default. |
 | `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
 | `websearch.tavily_api_key` | `string` | Tavily credential. Overrides `TAVILY_API_KEY` when set. |
@@ -111,9 +118,14 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - `disabled_tools` uses public tool names such as `hashline_edit` or `docs_query`. Disabled tools are enforced through every nested delegate path - builtin agents, and both the default and allowlist/denylist forms of YAML agents.
 - `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`, `reviewer`.
 - `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
+- Compact tool output preserves Pi's full built-in renderers when expanded (`Ctrl+O`) and can be toggled during a session with `/toggle-verbose`.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
 
 ## Tool surface
+### Compact Pi built-in rendering
+
+When `compact_tools.enabled` is true, Blackbytes wraps Pi's built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` tools so collapsed results render as one-line summaries. Expanded results still use Pi's original renderers. Blackbytes does not replace its own bundled `grep` implementation with Pi's built-in `grep`; the bundled `grep` already renders compact summaries and keeps its Blackbytes-specific parameters.
+
 
 ### Bundled local tools
 

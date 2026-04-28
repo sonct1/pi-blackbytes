@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.6 (2026-04-28)
+
+### Added
+
+- **Bundled prompt templates**: package-level prompt templates for fresh-eyes review, documentation refresh, project innovation ideation, and logical commit-and-push workflows. These templates are discovered by Pi as slash commands from the package `prompts/` directory.
+
 ## 0.2.5 (2026-04-28)
 
 ### Changed

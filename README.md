@@ -25,6 +25,17 @@ The wizard maps Blackbytes sub-agents to models that Pi already has available in
 | `/setup-models` | Interactive mapping from Pi-available models to Blackbytes sub-agents (`blackbytes.sub_agents.<name>.model`) |
 | `/blackbytes-status` | Print enabled tools, enabled sub-agents, enabled skills, Sub-Agent Snapshot (model/reasoning/allowed tools per agent), YAML diagnostics, and the current redacted `blackbytes` config |
 
+## Prompt templates
+
+Blackbytes bundles package-level Pi prompt templates that are available as slash commands after installation:
+
+| Template | Purpose |
+|---|---|
+| `/review-fresh-eyes` | Re-read recently changed code with fresh eyes, look for obvious bugs or confusion, and fix anything uncovered. |
+| `/update-docs` | Update README and other documentation so they describe the current project state. |
+| `/suggest-innovation` | Propose the single most valuable, innovative addition for the project. |
+| `/commit-and-push` | Commit changed files in logical groups with detailed commit messages and push, while skipping ephemeral files. |
+
 ## Configuration
 
 Blackbytes reads the top-level `blackbytes` object from the Pi settings file.

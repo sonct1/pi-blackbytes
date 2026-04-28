@@ -117,6 +117,47 @@ interface ErrorResult {
 
 type ToolResult = SuccessResult | ErrorResult;
 
+const HASHLINE_ERROR_COMPACT_CHARS = 1_200;
+const HASHLINE_ERROR_SUMMARY_CHARS = 160;
+const HASHLINE_ERROR_COMPACT_MARKER =
+  "\n\n[Output shortened. Expand the tool result with ctrl+o for full details.]\n\n";
+
+function compactHashlineError(error: string): string {
+  if (error.length <= HASHLINE_ERROR_COMPACT_CHARS) return error;
+
+  const keepChars = Math.max(
+    0,
+    HASHLINE_ERROR_COMPACT_CHARS - HASHLINE_ERROR_COMPACT_MARKER.length,
+  );
+  const headChars = Math.ceil(keepChars / 2);
+  const tailChars = keepChars - headChars;
+  const head = error.slice(0, headChars).trimEnd();
+  const tail = tailChars > 0 ? error.slice(-tailChars).trimStart() : "";
+  return `${head}${HASHLINE_ERROR_COMPACT_MARKER}${tail}`;
+}
+
+function summarizeHashlineError(error: string): string {
+  const firstLine = error.split("\n", 1)[0]?.trim() || "hashline_edit failed";
+  if (firstLine.length <= HASHLINE_ERROR_SUMMARY_CHARS) return firstLine;
+  return `${firstLine.slice(0, HASHLINE_ERROR_SUMMARY_CHARS - 1)}…`;
+}
+
+function buildHashlineErrorResult(error: string): {
+  isError: true;
+  content: Array<{ type: "text"; text: string }>;
+  details: ToolResultStats;
+} {
+  const compact = compactHashlineError(error);
+  return {
+    isError: true,
+    content: [{ type: "text", text: compact }],
+    details: {
+      summary: summarizeHashlineError(error),
+      fullText: error,
+    } satisfies ToolResultStats,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Core implementation
 // ---------------------------------------------------------------------------
@@ -326,10 +367,7 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
           details: { summary: result.message } satisfies ToolResultStats,
         };
       }
-      return {
-        isError: true,
-        content: [{ type: "text", text: result.error }],
-      };
+      return buildHashlineErrorResult(result.error);
     },
     renderCall: makeRenderCall("✎", "hashline_edit", (args, theme) => {
       const filePath = str(args.filePath);

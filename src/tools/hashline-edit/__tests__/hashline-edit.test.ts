@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { applyHashlineEdits } from "../index.js";
+import { _resetEnabledSet, initEnabledSet } from "../../../config/enabled-set.js";
+import { parseBlackbytesConfig } from "../../../config/schema.js";
+import { applyHashlineEdits, registerHashlineEditTool } from "../index.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -36,6 +38,29 @@ function readTmp(): string {
   return readFileSync(tmpFile, "utf8");
 }
 
+interface HashlineToolResult {
+  readonly isError?: boolean;
+  readonly content: Array<{ type: string; text: string }>;
+  readonly details?: { summary?: string; fullText?: string };
+}
+
+function makeConfig() {
+  const result = parseBlackbytesConfig({});
+  if (!result.ok) throw new Error(result.errors.join(", "));
+  return result.value;
+}
+
+function makeMockPi() {
+  const registered: unknown[] = [];
+  return {
+    pi: {
+      registerTool(definition: unknown) {
+        registered.push(definition);
+      },
+    },
+    registered,
+  };
+}
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -55,6 +80,7 @@ describe("hashline_edit", () => {
     } catch {
       /* ignore */
     }
+    _resetEnabledSet();
   });
 
   it("single-line replace", () => {
@@ -249,5 +275,31 @@ describe("hashline_edit", () => {
         /* ignore */
       }
     }
+  });
+
+  it("registered tool compacts long errors while preserving full details", async () => {
+    initEnabledSet(makeConfig());
+    const { pi, registered } = makeMockPi();
+    registerHashlineEditTool(pi as Parameters<typeof registerHashlineEditTool>[0]);
+
+    const tool = registered[0] as {
+      execute: (_toolCallId: string, input: unknown) => Promise<HashlineToolResult>;
+    };
+    const content = Array.from({ length: 300 }, (_, index) => `line ${index + 1}`).join("\n");
+    writeTmp(`${content}\n`);
+
+    const result = await tool.execute("test-call", {
+      filePath: tmpFile,
+      edits: [{ op: "replace", pos: "999#ZZ", lines: "replacement" }],
+    });
+
+    assert.equal(result.isError, true);
+    assert.ok(result.details?.fullText, "full error should be available in details");
+    assert.ok(result.content[0].text.length < result.details.fullText.length);
+    assert.match(result.content[0].text, /Output shortened/);
+    assert.match(result.content[0].text, /line 300/);
+    assert.match(result.details.summary ?? "", />>> mismatch/);
+    assert.match(result.details.fullText, /Current file/);
+    assert.match(result.details.fullText, /line 300/);
   });
 });

@@ -1,6 +1,14 @@
 import { type Theme, keyText } from "@mariozechner/pi-coding-agent";
 import { Container, Text } from "@mariozechner/pi-tui";
 
+/** Single tool invocation recorded in the sub-agent activity timeline. */
+export interface ToolHistoryEntry {
+  readonly name: string;
+  readonly summary?: string;
+  readonly startMs: number;
+  readonly endMs?: number;
+}
+
 /**
  * Shape of the `details` payload emitted by sub-agent progress updates and
  * the final tool result. Kept structurally compatible across runner.ts /
@@ -17,6 +25,8 @@ export interface SubAgentRenderDetails {
   readonly outputPreview?: string;
   readonly attemptedModels?: readonly string[];
   readonly currentTool?: string;
+  readonly toolCallCount?: number;
+  readonly toolHistory?: readonly ToolHistoryEntry[];
   readonly usage?: {
     readonly input?: number;
     readonly output?: number;
@@ -103,11 +113,34 @@ export function rebuildSubAgentResultComponent(
         ? (state.endedAt ?? Date.now()) - state.startedAt
         : undefined));
 
-  // Single-line header: "<status> · <elapsed> · <chars> · <model> · $<cost> · ⌃O expand"
+  // Single-line header: "<status> · <elapsed> · <calls> · 🔧 <tool> · <chars> · <model> · $<cost> · ⌃O expand"
   // Everything fits on one row; press Ctrl+O for full output.
-  const headerBits: string[] = [theme.fg(color, theme.bold(status))];
+  const statusIcon =
+    status === "completed"
+      ? "✓ "
+      : status === "failed"
+        ? "✗ "
+        : status === "cancelled" || status === "timed_out"
+          ? "⚠ "
+          : "";
+  const headerBits: string[] = [theme.fg(color, theme.bold(`${statusIcon}${status}`))];
   if (elapsedMs !== undefined) {
     headerBits.push(theme.fg("muted", formatDuration(elapsedMs)));
+  }
+  if (typeof details.toolCallCount === "number" && details.toolCallCount > 0) {
+    headerBits.push(theme.fg("muted", `${details.toolCallCount} calls`));
+  }
+  if (status === "running" && details.currentTool) {
+    const toolLabel = details.currentTool;
+    const currentEntry =
+      details.toolHistory && details.toolHistory.length > 0
+        ? details.toolHistory[details.toolHistory.length - 1]
+        : undefined;
+    const argHint =
+      currentEntry && currentEntry.endMs === undefined && currentEntry.summary
+        ? ` ${currentEntry.summary}`
+        : "";
+    headerBits.push(theme.fg("accent", `🔧 ${toolLabel}${argHint}`));
   }
   if (typeof details.outputChars === "number" && details.outputChars > 0) {
     headerBits.push(theme.fg("muted", `${details.outputChars.toLocaleString("en-US")} chars`));
@@ -130,6 +163,30 @@ export function rebuildSubAgentResultComponent(
   // Body: only when expanded. Collapsed view is header-only — the live tail
   // was noisy and the final tail was meaningless.
   if (options.expanded) {
+    // Tool activity log: compact timeline of tool calls
+    if (details.toolHistory && details.toolHistory.length > 0) {
+      const MAX_DISPLAY_HISTORY = 30;
+      const history = details.toolHistory;
+      const displayEntries =
+        history.length > MAX_DISPLAY_HISTORY ? history.slice(-MAX_DISPLAY_HISTORY) : history;
+      const skipped = history.length - displayEntries.length;
+
+      const historyLines: string[] = [];
+      if (skipped > 0) {
+        historyLines.push(theme.fg("muted", `  [+${skipped} earlier calls]`));
+      }
+      for (const entry of displayEntries) {
+        const done = entry.endMs !== undefined;
+        const icon = done ? theme.fg("success", "✓") : theme.fg("accent", "▸");
+        const dur = done
+          ? theme.fg("muted", `(${formatDuration(entry.endMs! - entry.startMs)})`)
+          : theme.fg("accent", "(running…)");
+        const hint = entry.summary ? ` ${theme.fg("muted", entry.summary)}` : "";
+        historyLines.push(`  ${icon} ${theme.bold(entry.name)}${hint} ${dur}`);
+      }
+      component.addChild(new Text(`\n${historyLines.join("\n")}`, 0, 0));
+    }
+
     const finalText = !options.isPartial ? getResultText(result) : "";
     const previewText = options.isPartial ? (details.outputPreview ?? "") : "";
     const bodyText = options.isPartial ? previewText : finalText;

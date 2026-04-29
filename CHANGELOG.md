@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.8 (2026-04-29)
+
+### Added
+
+- **Sub-agent tool activity tracking**: sub-agent progress header displays tool call count, current tool name with argument summary (`🔧 read src/config/schema.ts`), and `✓`/`✗`/`⚠` status icons for terminal states (completed/failed/cancelled/timed_out). Expanded view (`Ctrl+O`) renders a tool activity timeline showing the last 30 invocations with `✓`/`▸` icons, argument summaries, and per-call durations.
+- **Extension tool result rendering**: all bundled and HTTP-backed tools (grep, glob, hashline_edit, ast_search, ast_replace, web_search, web_fetch, docs_resolve, docs_query, gh_search) render collapsed results with `✓`/`✗` status icons and display partial-state messages (`Searching...`, `Fetching...`, `Scanning...`, etc.) while executing.
+
+### Changed
+
+- **Tool icon deconfliction**: `web_search` uses 🌐, `web_fetch` uses 📥, and `reviewer` sub-agent uses 📋 to eliminate icon collisions with `grep` (🔍) and `gh_search` (🔎).
+
 ## 0.2.7 (2026-04-28)
 
 ### Fixed

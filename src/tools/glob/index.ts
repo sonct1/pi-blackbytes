@@ -5,7 +5,7 @@ import fg from "fast-glob";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { makeRenderCall, str } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const DISPLAY_LIMIT = 25;
@@ -134,6 +134,6 @@ export function registerGlobTool(pi: ExtensionAPI): void {
       if (path) parts.push(theme.fg("toolOutput", `in ${path}`));
       return parts.join(" ");
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Scanning..." }),
   });
 }

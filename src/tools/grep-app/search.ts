@@ -8,7 +8,7 @@ import {
   type McpToolCallResult,
 } from "../_shared/mcp-http-client.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const COMPACT_HIT_LIMIT = 5;
@@ -196,6 +196,6 @@ export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
       if (repo) parts.push(theme.fg("toolOutput", `in ${repo}`));
       return parts.join(" ");
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Searching..." }),
   });
 }

@@ -5,7 +5,7 @@ import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 import { providerApiKey, resolveWebProviderConfig } from "./provider-config.js";
 
@@ -147,10 +147,10 @@ export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
     }),
     execute: (params: { query: string; numResults?: number; category?: "people" | "company" }) =>
       executeWebsearchSearch(params),
-    renderCall: makeRenderCall("🔍", "web_search", (args, theme) => {
+    renderCall: makeRenderCall("🌐", "web_search", (args, theme) => {
       const q = str(args.query);
       return q ? theme.fg("accent", `"${truncate(q, 60)}"`) : "";
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Searching..." }),
   });
 }

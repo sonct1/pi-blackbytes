@@ -122,40 +122,48 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
 
 ## Tool surface
-### Compact Pi built-in rendering
 
-When `compact_tools.enabled` is true, Blackbytes wraps Pi's built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` tools so collapsed results render as one-line summaries. Expanded results still use Pi's original renderers. Blackbytes does not replace its own bundled `grep` implementation with Pi's built-in `grep`; the bundled `grep` already renders compact summaries and keeps its Blackbytes-specific parameters.
+### Tool result rendering
 
+Every Blackbytes tool provides structured, scannable result rendering with three states:
+
+| State | What the user sees |
+|---|---|
+| **Running** | A muted status message indicating progress (e.g., `Searching...`, `Fetching...`, `Scanning...`) |
+| **Collapsed** (default) | A one-line summary with a `✓` (success) or `✗` (error) icon, followed by a brief summary and a `ctrl+o to expand` hint |
+| **Expanded** (`Ctrl+O`) | Full tool output in `toolOutput` color |
+
+**Compact Pi built-in rendering**: When `compact_tools.enabled` is true, Blackbytes wraps Pi's built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` tools so collapsed results render as one-line summaries with `✓`/`✗` icons, paths, and metadata. Expanded results still use Pi's original renderers. Blackbytes does not replace its own bundled `grep` implementation with Pi's built-in `grep`; the bundled `grep` already renders compact summaries and keeps its Blackbytes-specific parameters.
 
 ### Bundled local tools
 
-| Tool | Purpose |
-|---|---|
-| `glob` | Fast file pattern matching with safety limits |
-| `grep` | Regex content search with include filters, optional context lines, and multiple output modes (`content`, `files_with_matches`, `count`). Uses `ripgrep` when available and falls back to a Node.js implementation. |
-| `ast_search` | AST-aware structural search across 25 languages |
-| `ast_replace` | AST-aware structural rewrite with dry-run default |
-| `hashline_edit` | LINE#ID-anchored file editing with snapshot semantics |
+| Tool | Icon | Purpose |
+|---|---|---|
+| `glob` | 📂 | Fast file pattern matching with safety limits |
+| `grep` | 🔍 | Regex content search with include filters, optional context lines, and multiple output modes (`content`, `files_with_matches`, `count`). Uses `ripgrep` when available and falls back to a Node.js implementation. |
+| `ast_search` | 🌳 | AST-aware structural search across 25 languages |
+| `ast_replace` | ✏️ | AST-aware structural rewrite with dry-run default |
+| `hashline_edit` | ✎ | LINE#ID-anchored file editing with snapshot semantics |
 
 ### HTTP-backed tools
 
-| Tool | Purpose |
-|---|---|
-| `web_search` | Web search through Exa by default, or Tavily when configured |
-| `web_fetch` | Extract a URL through Exa/Tavily with direct HTTP fallback |
-| `docs_resolve` | Resolve a library/package to a Context7 ID |
-| `docs_query` | Query current library documentation and examples from Context7 |
-| `gh_search` | Search code patterns across public GitHub repositories |
+| Tool | Icon | Purpose |
+|---|---|---|
+| `web_search` | 🌐 | Web search through Exa by default, or Tavily when configured |
+| `web_fetch` | 📥 | Extract a URL through Exa/Tavily with direct HTTP fallback |
+| `docs_resolve` | 📚 | Resolve a library/package to a Context7 ID |
+| `docs_query` | 📖 | Query current library documentation and examples from Context7 |
+| `gh_search` | 🔎 | Search code patterns across public GitHub repositories |
 
 ### Delegate tools
 
-| Tool | Purpose |
-|---|---|
-| `delegate_explore` | Read-only codebase discovery for "where is X?" work |
-| `delegate_oracle` | Read-only high-reasoning consultation for difficult debugging or design questions |
-| `delegate_librarian` | Read-only docs, web, and cross-repository research |
-| `delegate_general` | Full-access execution for well-scoped multi-file implementation work |
-| `delegate_reviewer` | Read-only code reviewer for diffs, patches, and PRs; produces severity-classified findings (High/Medium/Low) and a Verdict |
+| Tool | Icon | Purpose |
+|---|---|---|
+| `delegate_explore` | 🔭 | Read-only codebase discovery for "where is X?" work |
+| `delegate_oracle` | 🧠 | Read-only high-reasoning consultation for difficult debugging or design questions |
+| `delegate_librarian` | 📚 | Read-only docs, web, and cross-repository research |
+| `delegate_general` | ⚡ | Full-access execution for well-scoped multi-file implementation work |
+| `delegate_reviewer` | 📋 | Read-only code reviewer for diffs, patches, and PRs; produces severity-classified findings (High/Medium/Low) and a Verdict |
 
 ### YAML sub-agents
 
@@ -209,24 +217,50 @@ The overlay is capped at ~4 KB, built by `src/sub-agents/runtime-overlay.ts`, an
 - Constraints derived from `AGENTS.md` (truncated, with secrets redacted)
 
 
-## Progress / streaming
+## Sub-agent progress display
 
-Blackbytes supports **structured progress updates** for delegated sub-agents, but it still does **not** stream raw nested-Pi stdout into the parent session.
+Delegate tools emit bounded, redacted `onUpdate` status events while the nested session runs. The TUI renders a live-updating display with two modes:
 
-### What is surfaced
+### Collapsed view (default)
 
-Delegate tools emit bounded, redacted `onUpdate` status events while the nested session runs. The parent UI can show:
-- agent name, status, model, working directory, and finalized tool allowlist
-- elapsed time, captured output size, current tool, and token/cost usage when available
-- a compact output preview with secrets redacted and length capped
+A single-line header showing real-time execution status:
 
-These updates are UI-only. They do **not** append intermediate nested output to the final tool result or to the parent model context.
+```
+✓ completed · 12.5s · 8 calls · 2,048 chars · gpt-4o · $0.0312 · ctrl+o to expand
+```
 
-### What is intentionally not streamed
+Header elements (left to right):
+- **Status icon + text**: `✓ completed` (green), `✗ failed` (red), `⚠ timed_out` / `⚠ cancelled` (yellow), `running` (accent, no icon)
+- **Elapsed time**: live-ticking wall-clock counter
+- **Tool call count**: total number of tool invocations by the sub-agent
+- **Current tool** (running only): `🔧 read src/config/schema.ts` — the active tool name with a truncated argument summary
+- **Output chars**: total captured assistant output size
+- **Model**: the model used for the current or final attempt
+- **Cost**: accumulated token cost across all turns
+- **Expand hint**: `ctrl+o to expand`
 
-Raw nested-Pi stdout is not forwarded. It contains the full nested conversation: reasoning tokens, tool calls, tool results, and final output. Dumping it into the parent UI would be noisy and may expose sensitive values from nested tool output.
+### Expanded view (`Ctrl+O`)
 
-The final delegate result remains a concise text block returned after the nested session completes. Use `system_prompt_log` only when you explicitly need opt-in system-prompt auditing.
+When expanded, the header is followed by a **tool activity timeline** showing the last 30 tool invocations:
+
+```
+  [+5 earlier calls]
+  ✓ read src/config/schema.ts (0.2s)
+  ✓ ast_search 'registerTool' (1.2s)
+  ✓ bash grep -r "subagent" (0.8s)
+  ✓ read src/sub-agents/runner.ts (0.1s)
+  ▸ bash bun run build (running…)
+```
+
+Each entry shows a `✓` (completed, green) or `▸` (running, accent) icon, the tool name, an optional argument summary (path, command, query, etc.), and the execution duration. Tool arguments are extracted from well-known parameter names (`path`, `command`, `query`, `pattern`, `url`, etc.) and truncated to 50 characters.
+
+Below the timeline, the expanded view shows the assistant's output preview (while running) or the final result text (when complete).
+
+### Design constraints
+
+Raw nested-Pi stdout is not forwarded to the parent TUI. It contains the full nested conversation — reasoning tokens, tool calls, tool results, and final output — and dumping it would be noisy and may expose sensitive values from nested tool output.
+
+The final delegate result remains a concise text block returned after the nested session completes. Progress updates are UI-only: they do **not** append intermediate nested output to the final tool result or to the parent model context.
 
 ## `hashline_edit`
 

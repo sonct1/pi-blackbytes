@@ -3,7 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
 
 interface AstGrepMatch {
@@ -143,6 +143,6 @@ export function registerAstGrepSearchTool(pi: ExtensionAPI): void {
       if (lang) parts.push(theme.fg("muted", `[${lang}]`));
       return parts.join(" ");
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Searching..." }),
   });
 }

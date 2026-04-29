@@ -5,7 +5,7 @@ import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { makeRenderCall, str } from "../_shared/call-render.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 export interface ResolveParams {
@@ -118,6 +118,6 @@ export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {
       const lib = str(args.libraryName);
       return lib ? theme.fg("accent", `"${lib}"`) : "";
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Resolving..." }),
   });
 }

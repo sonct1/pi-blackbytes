@@ -5,7 +5,7 @@ import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { computeCID } from "../../utils/cid.js";
 import { makeRenderCall, str } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 
 /** Format a file's lines into LINE#ID annotated text for error messages. */
 function annotateLines(lines: string[]): string {
@@ -380,6 +380,6 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
       if (rename) parts.push(theme.fg("warning", `→ ${rename}`));
       return parts.join(" ");
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Editing..." }),
   });
 }

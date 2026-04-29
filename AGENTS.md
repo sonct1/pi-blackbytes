@@ -105,6 +105,16 @@ Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registe
 
 Read-only sub-agents (explore, oracle, librarian, reviewer) each declare a `prependSystemPrompt` hook that builds a lightweight (~4 KB) runtime overlay via `src/sub-agents/runtime-overlay.ts`. The overlay carries current date, working directory, and final tool allowlist, and is bounded with `redactSecrets` to strip sensitive values. The General sub-agent uses the larger (~8 KB) safety overlay from `src/sub-agents/general-safety-overlay.ts` instead, which additionally includes AGENTS.md-derived constraints.
 
+### Tool rendering
+
+Tool result rendering is split into three layers:
+
+1. **Compact builtins** (`src/tools/compact-tools/`): wraps Pi's `read`, `bash`, `edit`, `write`, `find`, `ls` with one-line `✓`/`✗` summaries and partial states (`Reading...`, `Running...`).
+2. **Extension tools** (`src/tools/_shared/stats-render.ts`): `buildStatsRenderResult()` factory provides `✓`/`✗` status icons, partial-state messages (`Searching...`, `Fetching...`, etc.), and collapsed summaries for all bundled and HTTP-backed tools.
+3. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with status icon (`✓`/`✗`/`⚠`), elapsed time, tool call count, current tool with argument summary, output chars, model, and cost. Expanded view shows a tool activity timeline (last 30 calls with `✓`/`▸` icons, names, arg summaries, durations). Progress is driven by `createProgressReporter()` in `register.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events.
+
+Tool icons are unique per tool to avoid visual ambiguity when scanning call lines. The icon map for sub-agents lives in `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`.
+
 ## Code style
 
 - Biome: 2-space indent, double quotes, semicolons, 100-char line width

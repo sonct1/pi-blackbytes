@@ -6,7 +6,7 @@ import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { compactText } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 import { type WebProvider, providerApiKey, resolveWebProviderConfig } from "./provider-config.js";
 
@@ -363,10 +363,10 @@ export function registerWebsearchFetchTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: (params: FetchParams) => executeWebsearchFetch(params),
-    renderCall: makeRenderCall("🌐", "web_fetch", (args, theme) => {
+    renderCall: makeRenderCall("📥", "web_fetch", (args, theme) => {
       const url = str(args.url);
       return url ? theme.fg("accent", truncate(url, 80)) : "";
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Fetching..." }),
   });
 }

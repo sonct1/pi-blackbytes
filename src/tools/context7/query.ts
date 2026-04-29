@@ -6,7 +6,7 @@ import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { compactText } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
+import { type ToolResultStats, buildStatsRenderResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const DOCS_QUERY_TOKEN_LIMIT = "4000";
@@ -126,6 +126,6 @@ export function registerQueryDocsTool(pi: ExtensionAPI): void {
       if (q) parts.push(theme.fg("accent", `"${truncate(q, 50)}"`));
       return parts.join(" ");
     }),
-    renderResult: renderStatsResult,
+    renderResult: buildStatsRenderResult({ partial: "Querying..." }),
   });
 }

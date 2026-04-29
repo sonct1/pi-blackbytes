@@ -6,7 +6,7 @@ import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
 import { type FallbackResult, executeWithFallback, formatAttempts } from "./fallback.js";
 import { buildSystemPrompt } from "./prompt-builder.js";
-import { buildSubAgentRenderResult } from "./render.js";
+import { type ToolHistoryEntry, buildSubAgentRenderResult } from "./render.js";
 import { type SpawnFn, formatDelegateFailure, redactDelegateText, runNestedPi } from "./runner.js";
 import { getAgentSnapshotFor } from "./snapshot.js";
 import type { PiSessionEvent } from "./types.js";
@@ -37,6 +37,8 @@ interface SubAgentProgressDetails {
   readonly outputPreview?: string;
   readonly attemptedModels?: readonly string[];
   readonly currentTool?: string;
+  readonly toolCallCount: number;
+  readonly toolHistory: readonly ToolHistoryEntry[];
   readonly usage?: SubAgentProgressUsage;
 }
 
@@ -46,6 +48,8 @@ type AgentToolUpdate = (update: {
 }) => void;
 
 const MAX_PROGRESS_PREVIEW_CHARS = 8_192;
+const MAX_TOOL_HISTORY = 100;
+const MAX_TOOL_ARG_SUMMARY = 50;
 const TRUNCATION_MARKER = "\n[... truncated ...]\n";
 
 function isAgentToolUpdate(value: unknown): value is AgentToolUpdate {
@@ -88,6 +92,14 @@ function createProgressReporter(opts: {
   let outputChars = 0;
   let currentModel = opts.model;
   let currentTool: string | undefined;
+  let toolCallCount = 0;
+  const toolHistory: Array<{
+    name: string;
+    summary?: string;
+    startMs: number;
+    endMs?: number;
+  }> = [];
+  const pendingToolArgs = new Map<string, string[]>();
   let usage: SubAgentProgressUsage | undefined;
   let onUpdate: AgentToolUpdate | undefined = onUpdateRaw;
 
@@ -124,6 +136,8 @@ function createProgressReporter(opts: {
       outputPreview: preview || undefined,
       attemptedModels,
       currentTool,
+      toolCallCount,
+      toolHistory: toolHistory.length > 0 ? [...toolHistory] : [],
       usage,
     };
   };
@@ -143,6 +157,31 @@ function createProgressReporter(opts: {
   };
 
   const isStringRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object";
+
+  /** Extract a short human-readable hint from tool arguments. */
+  const summarizeToolArgs = (args: Record<string, unknown>): string | undefined => {
+    // Try well-known parameter names in priority order
+    for (const key of [
+      "path",
+      "filePath",
+      "command",
+      "query",
+      "pattern",
+      "question",
+      "task",
+      "prompt",
+      "url",
+      "request",
+    ]) {
+      const val = args[key];
+      if (typeof val === "string" && val.length > 0) {
+        return val.length > MAX_TOOL_ARG_SUMMARY
+          ? `${val.slice(0, MAX_TOOL_ARG_SUMMARY - 1)}\u2026`
+          : val;
+      }
+    }
+    return undefined;
+  };
 
   const handleEvent = (event: PiSessionEvent): void => {
     let changed = false;
@@ -173,6 +212,16 @@ function createProgressReporter(opts: {
             const tc = ame.toolCall as Record<string, unknown>;
             if (typeof tc.name === "string") {
               currentTool = tc.name;
+              // Capture args summary for the upcoming tool_execution_start
+              const args = tc.arguments ?? tc.input;
+              if (isStringRecord(args)) {
+                const summary = summarizeToolArgs(args as Record<string, unknown>);
+                if (summary) {
+                  const queue = pendingToolArgs.get(tc.name) ?? [];
+                  queue.push(summary);
+                  pendingToolArgs.set(tc.name, queue);
+                }
+              }
               changed = true;
             }
           }
@@ -207,11 +256,34 @@ function createProgressReporter(opts: {
       case "tool_execution_start": {
         if (typeof event.toolName === "string") {
           currentTool = event.toolName;
+          toolCallCount++;
+          // Resolve args summary: prefer pending from toolcall_end, fallback to event
+          const queue = pendingToolArgs.get(event.toolName);
+          let summary = queue?.shift();
+          if (queue && queue.length === 0) pendingToolArgs.delete(event.toolName);
+          if (!summary && isStringRecord(event.arguments)) {
+            summary = summarizeToolArgs(event.arguments as Record<string, unknown>);
+          }
+          toolHistory.push({
+            name: event.toolName,
+            summary,
+            startMs: Date.now() - startedAt,
+          });
+          // Cap history to avoid unbounded growth
+          if (toolHistory.length > MAX_TOOL_HISTORY) toolHistory.shift();
           changed = true;
         }
         break;
       }
       case "tool_execution_end": {
+        // Close the most recent open history entry
+        for (let i = toolHistory.length - 1; i >= 0; i--) {
+          if (toolHistory[i].endMs === undefined) {
+            toolHistory[i].endMs = Date.now() - startedAt;
+            changed = true;
+            break;
+          }
+        }
         if (currentTool !== undefined) {
           currentTool = undefined;
           changed = true;
@@ -257,7 +329,7 @@ const SUB_AGENT_ICONS: Record<string, string> = {
   oracle: "🧠",
   librarian: "📚",
   general: "⚡",
-  reviewer: "🔍",
+  reviewer: "📋",
 };
 
 /** Derive the primary display key from a declaration's parameter schema. */

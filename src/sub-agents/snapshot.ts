@@ -29,6 +29,7 @@ import {
   MUTATING_EXEC_TOOLS,
   PI_BUILTIN_TOOLS,
   READ_SEARCH_DOCS_TOOLS,
+  finalizeNestedTools,
 } from "./delegable-tools.js";
 
 const KNOWN_AGENT_FIELDS = new Set([
@@ -38,6 +39,7 @@ const KNOWN_AGENT_FIELDS = new Set([
   "temperature",
   "fallbackModels",
   "promptMode",
+  "executionMode",
 ]);
 
 /** Pi CLI accepted thinking levels (packages/coding-agent/src/cli/args.ts). */
@@ -58,17 +60,15 @@ export type AllowedToolsSummary =
       categories: { read: number; mutate: number; pi_builtin: number; extension: number };
     };
 
-function computeAllowedToolsSummary(decl: SubAgentDeclaration): AllowedToolsSummary {
-  const resolved =
-    typeof decl.allowedTools === "function" ? decl.allowedTools() : decl.allowedTools;
-  if (resolved.length <= 8) {
-    return { mode: "exact", tools: resolved };
+function computeAllowedToolsSummary(tools: readonly string[]): AllowedToolsSummary {
+  if (tools.length <= 8) {
+    return { mode: "exact", tools };
   }
   let read = 0;
   let mutate = 0;
   let pi_builtin = 0;
   let extension = 0;
-  for (const t of resolved) {
+  for (const t of tools) {
     if (MUTATING_EXEC_TOOLS.has(t)) {
       mutate++;
     } else if (READ_SEARCH_DOCS_TOOLS.has(t)) {
@@ -81,7 +81,7 @@ function computeAllowedToolsSummary(decl: SubAgentDeclaration): AllowedToolsSumm
   }
   return {
     mode: "summary",
-    total: resolved.length,
+    total: tools.length,
     categories: { read, mutate, pi_builtin, extension },
   };
 }
@@ -112,6 +112,13 @@ export interface AgentSnapshot {
    */
   readonly fallbackModels?: readonly string[];
   /**
+   * Per-agent tool execution mode override.
+   * - `"sequential"` — serialize with other tool calls in the same batch.
+   * - `"parallel"` — allow concurrent execution (Pi default).
+   * When `undefined`, Pi's default behavior applies (parallel).
+   */
+  readonly executionMode?: "sequential" | "parallel";
+  /**
    * Whether this agent is eligible for model fallback.
    * True when mutability is `read-only` AND no MUTATING_EXEC_TOOLS appear in
    * the resolved tool allowlist. Computed once at snapshot time.
@@ -126,6 +133,15 @@ export interface AgentSnapshot {
   readonly extra: Readonly<Record<string, unknown>>;
   /** Summarized allowed-tools resolved at snapshot time. */
   readonly allowedToolsSummary: AllowedToolsSummary;
+  /**
+   * Tools dropped during finalization at snapshot time.
+   * Populated from the lenient finalization pass in `resolveAgentSnapshot()`.
+   */
+  readonly droppedTools?: {
+    readonly globalDisabled: readonly string[];
+    readonly mutability: readonly string[];
+    readonly unknown: readonly string[];
+  };
 }
 
 const MAX_TIMEOUT_MS = 3_600_000;
@@ -147,6 +163,7 @@ function isValidTimeoutMs(v: unknown): v is number {
 export function resolveAgentSnapshot(
   declaration: SubAgentDeclaration,
   config: BlackbytesConfig,
+  globalDisabled?: ReadonlySet<string>,
 ): AgentSnapshot {
   const declDefaults: ModelOverrides = declaration.staticOverrides ?? {};
   const jsonForAgent = config.sub_agents?.[declaration.name];
@@ -158,6 +175,7 @@ export function resolveAgentSnapshot(
   let jsonTimeoutMs: number | undefined;
   let jsonFallbackModels: readonly string[] | undefined;
   let jsonPromptMode: "static" | "append" | undefined;
+  let jsonExecutionMode: "sequential" | "parallel" | undefined;
 
   if (jsonForAgent && typeof jsonForAgent === "object") {
     const obj = jsonForAgent as Record<string, unknown>;
@@ -167,6 +185,9 @@ export function resolveAgentSnapshot(
     if (obj.temperature !== undefined) reserved.temperature = obj.temperature;
     if (obj.promptMode === "static" || obj.promptMode === "append") {
       jsonPromptMode = obj.promptMode;
+    }
+    if (obj.executionMode === "sequential" || obj.executionMode === "parallel") {
+      jsonExecutionMode = obj.executionMode;
     }
     if (
       Array.isArray(obj.fallbackModels) &&
@@ -182,14 +203,23 @@ export function resolveAgentSnapshot(
   const jsonReasoning = normalizeReasoningEffort(rawJsonReasoning);
   const defaultReasoning = normalizeReasoningEffort(declDefaults.reasoningEffort);
 
-  // Compute fallback eligibility: read-only mutability AND no mutating tools in resolved allowlist.
-  const resolvedTools =
+  // Run tools through the finalization pipeline to get accurate summary and eligibility.
+  const rawTools =
     typeof declaration.allowedTools === "function"
-      ? declaration.allowedTools()
-      : declaration.allowedTools;
-  const hasMutatingTool = [...resolvedTools].some((t) => MUTATING_EXEC_TOOLS.has(t));
-  const fallbackEligible =
-    (declaration.mutability ?? "read-only") !== "full-access" && !hasMutatingTool;
+      ? [...declaration.allowedTools()]
+      : [...declaration.allowedTools];
+  const mutability = declaration.mutability ?? "read-only";
+  const finalized = finalizeNestedTools({
+    tools: rawTools,
+    globalDisabled: globalDisabled ?? new Set(),
+    mutability,
+    mode: "lenient",
+    context: `snapshot ${declaration.name}`,
+  });
+
+  // Compute fallback eligibility from finalized (not raw) tools.
+  const hasMutatingTool = finalized.tools.some((t) => MUTATING_EXEC_TOOLS.has(t));
+  const fallbackEligible = mutability !== "full-access" && !hasMutatingTool;
 
   return Object.freeze({
     name: declaration.name,
@@ -199,11 +229,17 @@ export function resolveAgentSnapshot(
     reasoningEffort: jsonReasoning ?? defaultReasoning,
     timeoutMs: jsonTimeoutMs ?? declDefaults.timeoutMs,
     promptMode: jsonPromptMode ?? declaration.promptMode,
+    executionMode: jsonExecutionMode ?? declaration.executionMode,
     fallbackModels: jsonFallbackModels ?? declDefaults.fallbackModels,
     fallbackEligible,
     reserved: Object.freeze(reserved),
     extra: Object.freeze(extra),
-    allowedToolsSummary: computeAllowedToolsSummary(declaration),
+    allowedToolsSummary: computeAllowedToolsSummary(finalized.tools),
+    droppedTools: Object.freeze({
+      globalDisabled: finalized.droppedGlobalDisabled,
+      mutability: finalized.droppedMutability,
+      unknown: finalized.droppedUnknown,
+    }),
   });
 }
 
@@ -220,10 +256,11 @@ let sessionSnapshot: ReadonlyMap<string, AgentSnapshot> | undefined;
 export function initAgentSnapshot(
   declarations: readonly SubAgentDeclaration[],
   config: BlackbytesConfig,
+  globalDisabled?: ReadonlySet<string>,
 ): ReadonlyMap<string, AgentSnapshot> {
   const map = new Map<string, AgentSnapshot>();
   for (const decl of declarations) {
-    map.set(decl.name, resolveAgentSnapshot(decl, config));
+    map.set(decl.name, resolveAgentSnapshot(decl, config, globalDisabled));
   }
   sessionSnapshot = map;
   return map;

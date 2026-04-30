@@ -16,6 +16,7 @@ import {
   validateToolNames,
 } from "./delegable-tools.js";
 import type { YamlDiagnostics, YamlLoadedDeclaration, YamlSkippedFile } from "./diagnostics.js";
+import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
 
 // ---------------------------------------------------------------------------
 // YAML schema
@@ -67,6 +68,14 @@ const YamlSubAgentSchema = z
         message: "fallback_models must not contain duplicate entries",
       })
       .optional(),
+    /**
+     * Optional tool execution mode for this agent.
+     * - `"sequential"` — serialize with other tool calls in the same batch.
+     * - `"parallel"` — allow concurrent execution (Pi default).
+     * When omitted, Pi's default behavior applies (parallel).
+     * May be overridden at runtime via `sub_agents.<name>.executionMode` in settings.json.
+     */
+    execution_mode: z.enum(["sequential", "parallel"]).optional(),
   })
   .refine((d) => !(d.allowed_tools && d.denied_tools), {
     message: "allowed_tools and denied_tools are mutually exclusive",
@@ -201,10 +210,17 @@ function toDeclaration(
     source: "yaml",
     sourcePath,
     promptMode: input.prompt_mode,
+    executionMode: input.execution_mode,
     buildUserPrompt(params: YamlAgentParams) {
       return params.prompt;
     },
     staticOverrides,
+    prependSystemPrompt: ({ cwd, finalizedTools }) =>
+      buildSubAgentRuntimeOverlay({
+        agentName: input.name,
+        cwd,
+        finalizedTools,
+      }),
   });
 }
 

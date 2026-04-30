@@ -468,6 +468,51 @@ describe("registerSubAgent", () => {
     assert.match(running.details.outputPreview, /truncated/);
   });
 
+  it("executionMode defaults to undefined (parallel) for all agents", () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    const fullAccessDecl = defineSubAgent<{ task: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "full-access test",
+      parameters: Type.Object({ task: Type.String() }),
+      systemPrompt: "Test",
+      allowedTools: ["read", "write", "bash"],
+      mutability: "full-access",
+      finalizeMode: "strict",
+      buildUserPrompt: (p) => p.task,
+    });
+    registerSubAgent(pi, fullAccessDecl);
+    const toolDef = pi.registeredTools.get("delegate_explore")!;
+    assert.equal((toolDef as any).executionMode, undefined);
+  });
+
+  it("executionMode sequential when configured via snapshot", async () => {
+    const { _resetAgentSnapshot, initAgentSnapshot } = await import("../snapshot.js");
+    _resetAgentSnapshot();
+    initEnabledSet(defaultConfig);
+
+    const decl = defineSubAgent<{ q: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      buildUserPrompt: (p) => p.q,
+    });
+
+    initAgentSnapshot([decl], {
+      ...defaultConfig,
+      sub_agents: { explore: { executionMode: "sequential" } },
+    });
+
+    const pi = makeFakePi();
+    registerSubAgent(pi, decl);
+    const toolDef = pi.registeredTools.get("delegate_explore")!;
+    assert.equal((toolDef as any).executionMode, "sequential");
+  });
+
   it("refuses nested invocation at depth >= 1", async () => {
     initEnabledSet(defaultConfig);
     process.env.PI_NESTED_DEPTH = "1";

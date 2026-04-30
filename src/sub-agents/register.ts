@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getLogger } from "../shared/logger.js";
+import { redactSecrets } from "../shared/redact.js";
 import { makeSubAgentRenderCall } from "../tools/_shared/call-render.js";
 import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
@@ -102,6 +103,7 @@ function createProgressReporter(opts: {
   const pendingToolArgs = new Map<string, string[]>();
   let usage: SubAgentProgressUsage | undefined;
   let onUpdate: AgentToolUpdate | undefined = onUpdateRaw;
+  let lastDetails: SubAgentProgressDetails | undefined;
 
   const safeUpdate = (payload: {
     content: Array<{ type: "text"; text: string }>;
@@ -143,8 +145,9 @@ function createProgressReporter(opts: {
   };
 
   const emit = (status: SubAgentProgressStatus, attemptedModels?: readonly string[]) => {
-    if (!onUpdate) return;
     const details = buildDetails(status, attemptedModels);
+    lastDetails = details;
+    if (!onUpdate) return;
     safeUpdate({
       content: [{ type: "text", text: formatProgressSummary(details) }],
       details,
@@ -309,6 +312,9 @@ function createProgressReporter(opts: {
     finish(status: SubAgentProgressStatus, attemptedModels?: readonly string[]) {
       emit(status, attemptedModels);
     },
+    getLastDetails(): SubAgentProgressDetails | undefined {
+      return lastDetails;
+    },
   };
 }
 
@@ -369,6 +375,7 @@ export function registerSubAgent(
     label: declaration.name,
     description: declaration.description,
     parameters: declaration.parameters,
+    executionMode: getAgentSnapshotFor(declaration.name)?.executionMode,
     renderShell: "default",
     renderCall: makeSubAgentRenderCall(
       SUB_AGENT_ICONS[declaration.name] ?? "▸",
@@ -428,6 +435,15 @@ export function registerSubAgent(
                 text: `Error: Sub-agent "${declaration.name}" has no allowed tools after policy filtering. Check disabled_tools or the agent tool allowlist.`,
               },
             ],
+            details: {
+              agent: declaration.name,
+              status: "failed" as const,
+              allowedTools: [],
+              elapsedMs: 0,
+              outputChars: 0,
+              toolCallCount: 0,
+              toolHistory: [],
+            },
           };
         }
 
@@ -571,6 +587,7 @@ export function registerSubAgent(
         }
         return {
           content: [{ type: "text" as const, text }],
+          details: progress.getLastDetails(),
         };
       } catch (err) {
         // Convert any setup-time error (empty prompt, prompt-builder append throw,
@@ -585,9 +602,18 @@ export function registerSubAgent(
           content: [
             {
               type: "text" as const,
-              text: `Error: Sub-agent "${declaration.name}" failed before nested Pi execution\nDetails:\n${message}`,
+              text: `Error: Sub-agent "${declaration.name}" failed before nested Pi execution\nDetails:\n${redactSecrets(message)}`,
             },
           ],
+          details: {
+            agent: declaration.name,
+            status: "failed" as const,
+            allowedTools: [],
+            elapsedMs: 0,
+            outputChars: 0,
+            toolCallCount: 0,
+            toolHistory: [],
+          },
         };
       }
     },

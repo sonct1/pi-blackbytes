@@ -9,7 +9,7 @@ import type {
   SessionStartEvent,
 } from "@mariozechner/pi-coding-agent";
 import { setupBranding } from "../branding.js";
-import { initEnabledSet } from "../config/enabled-set.js";
+import { getEnabledSet, initEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import { registerSubAgentMeta } from "../config/resource-metadata.js";
 import { getLogger } from "../shared/logger.js";
@@ -88,7 +88,7 @@ export async function handleSessionStart(
   const allNames = allDeclarations.map((d) => d.name);
 
   initEnabledSet(config, allNames);
-  initAgentSnapshot(allDeclarations, config);
+  initAgentSnapshot(allDeclarations, config, getEnabledSet().disabledTools);
 
   if (yamlDeclarations.length > 0) {
     logger.info("Loaded YAML sub-agent declarations", {

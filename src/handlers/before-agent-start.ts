@@ -31,6 +31,14 @@ function buildResourcesBlock(enabledSubAgents: ReadonlySet<string>): string {
 // ---------------------------------------------------------------------------
 
 export function injectPromptAugmentation(systemPrompt: string, modelId?: string): string {
+  // Nested sessions receive their own runtime overlay from prependSystemPrompt.
+  // Injecting the parent-level augmentation would confuse the nested LLM with
+  // references to delegate_* tools it cannot use.
+  const nestedDepth = Number.parseInt(process.env.PI_NESTED_DEPTH ?? "0", 10);
+  if (nestedDepth >= 1) {
+    return systemPrompt;
+  }
+
   let enabledTools = new Set<string>();
   let enabledSubAgents = new Set<string>();
 

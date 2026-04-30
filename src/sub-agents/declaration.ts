@@ -103,6 +103,16 @@ export interface SubAgentDeclaration<
   readonly promptMode?: "static" | "append";
 
   /**
+   * Declaration-level default for Pi's tool execution mode.
+   * - `'sequential'` — serialize with other tool calls in the same batch.
+   * - `'parallel'` — allow concurrent execution (Pi default).
+   * When `undefined`, Pi's default behavior applies (parallel).
+   * YAML agents may set this from the `execution_mode` field.
+   * JSON `sub_agents.<name>.executionMode` overrides this at runtime.
+   */
+  readonly executionMode?: "sequential" | "parallel";
+
+  /**
    * Optional builder invoked AFTER tool finalization. Returned text is
    * prepended to the resolved system prompt before `runNestedPi()` is called.
    * Use for bounded safety/context overlays (e.g. the General agent overlay).

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { after, afterEach, before, describe, it } from "node:test";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { bootstrap } from "../../bootstrap.js";
 import { _resetEnabledSet, getEnabledSet } from "../../config/enabled-set.js";
 import { _resetSubAgentRegistry } from "../../config/resource-metadata.js";
@@ -47,6 +47,7 @@ async function settle(ms = 100): Promise<void> {
 describe("integration: before_agent_start", () => {
   let tmpDir: string;
   const originalAgentDir = process.env.PI_AGENT_DIR;
+  const originalNestedDepth = process.env.PI_NESTED_DEPTH;
 
   before(async () => {
     tmpDir = await makeTempDir();
@@ -59,6 +60,15 @@ describe("integration: before_agent_start", () => {
     } else {
       process.env.PI_AGENT_DIR = originalAgentDir;
     }
+    if (originalNestedDepth === undefined) {
+      delete process.env.PI_NESTED_DEPTH;
+    } else {
+      process.env.PI_NESTED_DEPTH = originalNestedDepth;
+    }
+  });
+
+  beforeEach(() => {
+    delete process.env.PI_NESTED_DEPTH;
   });
 
   afterEach(() => {
@@ -195,6 +205,8 @@ describe("integration: before_agent_start", () => {
 });
 
 it("uses ctx.model.id to choose prompt family before model_select runs", async () => {
+  const savedNestedDepth = process.env.PI_NESTED_DEPTH;
+  delete process.env.PI_NESTED_DEPTH;
   const subDir = await makeTempDir();
   try {
     await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
@@ -220,5 +232,10 @@ it("uses ctx.model.id to choose prompt family before model_select runs", async (
     assert.ok(!event.systemPrompt.includes("<agency>"), "Claude XML prompt should not be used");
   } finally {
     await fs.rm(subDir, { recursive: true, force: true });
+    if (savedNestedDepth === undefined) {
+      delete process.env.PI_NESTED_DEPTH;
+    } else {
+      process.env.PI_NESTED_DEPTH = savedNestedDepth;
+    }
   }
 });

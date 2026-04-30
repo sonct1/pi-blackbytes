@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
+import { redactSecrets } from "../shared/redact.js";
 import type { DelegateResult, PiSessionEvent, RunNestedPiOptions } from "./types.js";
 
 export type { RunNestedPiOptions, DelegateResult };
@@ -46,16 +47,7 @@ function truncateMiddle(text: string, maxChars = MAX_DISPLAY_DETAIL_CHARS): stri
 }
 
 export function redactDelegateText(text: string): string {
-  return text
-    .replace(
-      /(\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|KEY)[A-Z0-9_]*\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'",}]+)/gi,
-      "$1[REDACTED]",
-    )
-    .replace(
-      /((?:"[^"]*(?:api[_-]?key|token|secret|password|credential|key)[^"]*"|'[^']*(?:api[_-]?key|token|secret|password|credential|key)[^']*'|\b[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password|credential|key)[A-Za-z0-9_-]*\b)\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi,
-      "$1[REDACTED]",
-    )
-    .replace(/(Bearer\s+)[A-Za-z0-9._~+\-/=]+/gi, "$1[REDACTED]");
+  return redactSecrets(text);
 }
 
 function classifyFailure(

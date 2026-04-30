@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.12 (2026-04-30)
+
+### Added
+
+- **Configurable `executionMode` per agent**: sub-agents can now be configured as `"sequential"` or `"parallel"` via `sub_agents.<name>.executionMode` in `settings.json` or `execution_mode` in YAML declarations. Default is `undefined` (Pi parallel), preserving the ability to run multiple `delegate_general` calls concurrently during plan/bead implementation.
+- **YAML runtime overlay parity**: YAML-defined sub-agents now receive the same runtime overlay (current date, working directory, finalized tool list) as builtin agents via `prependSystemPrompt`.
+- **Accurate finalized-tools snapshot**: `AgentSnapshot.allowedToolsSummary` and `fallbackEligible` are now computed from finalized tools (after applying `disabled_tools` and mutability policy) instead of raw declaration tools. Added `droppedTools` field with diagnostic breakdown.
+- **Final progress details on tool result**: the `details` field (status, cost, latency, tool history, model) is now included in the final tool result, not just in progress updates. Error paths also emit `status: "failed"` details so the renderer no longer incorrectly shows them as completed.
+- **Centralized secret redaction**: merged redaction patterns from `runner.ts` and `general-safety-overlay.ts` into `src/shared/redact.ts`. Setup-time error messages are now redacted before surfacing.
+
+### Changed
+
+- **Nested sessions skip parent overlay**: `injectPromptAugmentation()` returns the system prompt unchanged when `PI_NESTED_DEPTH >= 1`, preventing nested LLMs from seeing `delegate_*` tool references they cannot use. Nested agents already receive their own runtime overlay from `prependSystemPrompt`.
+
+### Tests
+
+- Added 14 new tests: redaction patterns (8), finalized-tools snapshot (3), executionMode config resolution (2), snapshot executionMode precedence (1).
+
 ## 0.2.11 (2026-04-30)
 
 ### Changed

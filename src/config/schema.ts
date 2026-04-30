@@ -54,6 +54,7 @@ export const BlackbytesConfigSchema = z
                 message: "fallbackModels must not contain duplicate entries",
               })
               .optional(),
+            executionMode: z.enum(["sequential", "parallel"]).optional(),
             // RESERVED / UNSUPPORTED
             // ----------------------
             // The nested Pi CLI does not currently accept a `--temperature` flag

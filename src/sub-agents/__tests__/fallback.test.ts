@@ -300,9 +300,10 @@ describe("executeWithFallback", () => {
     assert.equal(result.success, false);
   });
 
-  it("YAML agent with bash in allowed_tools — fallback ineligible", async () => {
-    // A YAML-style agent with bash in allowedTools but read-only mutability
-    // is ineligible because bash is a MUTATING_EXEC_TOOL.
+  it("YAML agent with bash in allowed_tools — fallback eligible after mutability strip", async () => {
+    // A YAML-style agent with bash in allowedTools but read-only mutability:
+    // bash is stripped by the mutability policy during snapshot finalization,
+    // so finalized tools contain only read-safe tools → fallback IS eligible.
     const decl = defineSubAgent<{ q: string }>({
       name: "yaml-with-bash",
       toolName: "delegate_yaml-with-bash",
@@ -316,7 +317,11 @@ describe("executeWithFallback", () => {
       buildUserPrompt: (p) => p.q,
     });
     const snapshot = resolveAgentSnapshot(decl, BASE_CONFIG);
-    assert.equal(snapshot.fallbackEligible, false);
+    assert.equal(snapshot.fallbackEligible, true);
+    assert.ok(
+      snapshot.droppedTools?.mutability.includes("bash"),
+      "bash must appear in droppedTools.mutability",
+    );
   });
 
   // -------------------------------------------------------------------------

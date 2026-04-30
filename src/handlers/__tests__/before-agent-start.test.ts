@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import {
   SUB_AGENTS,
@@ -15,9 +15,20 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   return result.value;
 }
 
+const originalNestedDepth = process.env.PI_NESTED_DEPTH;
+
 beforeEach(() => {
   _resetEnabledSet();
   _resetSubAgentRegistry();
+  delete process.env.PI_NESTED_DEPTH;
+});
+
+afterEach(() => {
+  if (originalNestedDepth === undefined) {
+    delete process.env.PI_NESTED_DEPTH;
+  } else {
+    process.env.PI_NESTED_DEPTH = originalNestedDepth;
+  }
 });
 
 function seedBuiltinAgents() {

@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import type { BlackbytesConfig } from "../../config/schema.js";
 import { defineSubAgent } from "../declaration.js";
 import {
+  type AllowedToolsSummary,
   _resetAgentSnapshot,
   getAgentSnapshot,
   getAgentSnapshotFor,
@@ -132,6 +133,32 @@ describe("resolveAgentSnapshot", () => {
     assert.equal(Object.isFrozen(snap.reserved), true);
     assert.equal(Object.isFrozen(snap.extra), true);
   });
+
+  it("executionMode resolved from JSON config, falling back to declaration default", () => {
+    // JSON config takes precedence over declaration field.
+    const declWithDefault = defineSubAgent<{ q: string }>({
+      ...baseDecl,
+      executionMode: "parallel",
+    });
+    const configWithOverride: BlackbytesConfig = {
+      ...baseConfig,
+      sub_agents: { explore: { executionMode: "sequential" } },
+    };
+    const snap1 = resolveAgentSnapshot(declWithDefault, configWithOverride);
+    assert.equal(snap1.executionMode, "sequential", "JSON config overrides declaration");
+
+    // Declaration default used when JSON config omits executionMode.
+    const snap2 = resolveAgentSnapshot(declWithDefault, baseConfig);
+    assert.equal(snap2.executionMode, "parallel", "falls back to declaration default");
+
+    // Undefined when neither declaration nor JSON config sets it.
+    const snap3 = resolveAgentSnapshot(baseDecl, baseConfig);
+    assert.equal(
+      snap3.executionMode,
+      undefined,
+      "undefined when unconfigured (Pi parallel default)",
+    );
+  });
 });
 
 describe("session snapshot lifecycle", () => {
@@ -165,5 +192,56 @@ describe("session snapshot lifecycle", () => {
     const after = getAgentSnapshotFor("explore");
     assert.equal(after?.model, "initial-model", "snapshot must remain stable");
     assert.equal(after, before, "same frozen instance");
+  });
+});
+
+describe("resolveAgentSnapshot finalized tools", () => {
+  beforeEach(() => _resetAgentSnapshot());
+
+  it("globally disabled tools are excluded from allowedToolsSummary", () => {
+    const decl = defineSubAgent<{ q: string }>({
+      ...baseDecl,
+      allowedTools: ["read", "glob", "web_search"],
+    });
+    const snap = resolveAgentSnapshot(decl, baseConfig, new Set(["web_search"]));
+    assert.equal(snap.allowedToolsSummary.mode, "exact");
+    const { tools } = snap.allowedToolsSummary as Extract<AllowedToolsSummary, { mode: "exact" }>;
+    assert.ok(!tools.includes("web_search"), "globally disabled tool must not appear");
+    assert.ok(tools.includes("read"), "enabled tool must be present");
+    assert.ok(tools.includes("glob"), "other enabled tool must be present");
+  });
+
+  it("fallbackEligible reflects finalized tools after mutability stripping", () => {
+    // read-only agent lists bash (mutating) in allowedTools → stripped during finalization
+    const decl = defineSubAgent<{ q: string }>({
+      ...baseDecl,
+      allowedTools: ["read", "bash"],
+      mutability: "read-only",
+    });
+    const snap = resolveAgentSnapshot(decl, baseConfig);
+    // With finalized tools (bash stripped), no mutating tools remain → eligible
+    assert.equal(snap.fallbackEligible, true);
+    assert.ok(
+      snap.droppedTools?.mutability.includes("bash"),
+      "bash should be in droppedTools.mutability",
+    );
+  });
+
+  it("droppedTools reports globally disabled, mutability-stripped, and unknown tools", () => {
+    const decl = defineSubAgent<{ q: string }>({
+      ...baseDecl,
+      allowedTools: ["read", "web_search", "not_a_real_tool"],
+      mutability: "read-only",
+    });
+    const snap = resolveAgentSnapshot(decl, baseConfig, new Set(["web_search"]));
+    assert.ok(
+      snap.droppedTools?.globalDisabled.includes("web_search"),
+      "should report globally disabled tools",
+    );
+    assert.ok(
+      snap.droppedTools?.unknown.includes("not_a_real_tool"),
+      "should report unknown tools",
+    );
+    assert.deepEqual(snap.droppedTools?.mutability, [], "no mutating tools to strip");
   });
 });

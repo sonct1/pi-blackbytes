@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EnabledSet } from "../config/enabled-set.js";
+import { redactSecrets } from "../shared/redact.js";
+export { redactSecrets };
 
 /**
  * Maximum size, in characters, of the rendered safety overlay block.
@@ -34,24 +36,6 @@ export interface BuildGeneralSafetyOverlayInput {
    * Returns `undefined` when the file is missing.
    */
   readonly readRepoFile?: (relativePath: string) => Promise<string | undefined>;
-}
-
-const SECRET_PATTERNS: readonly RegExp[] = [
-  // Obvious key=value style secrets.
-  /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*[^\s,;}\]]+/gi,
-  // Bearer / Authorization headers.
-  /authorization\s*:\s*bearer\s+[A-Za-z0-9._-]+/gi,
-  // Long base64-ish blobs (≥ 24 chars) that look like credentials.
-  /\b(?:sk|pk|ghp|gho|ghu|ghs|github_pat|xox[baprs])[A-Za-z0-9_-]{16,}\b/g,
-];
-
-/** Replace obvious secret-shaped substrings with a redaction marker. */
-export function redactSecrets(text: string): string {
-  let out = text;
-  for (const pattern of SECRET_PATTERNS) {
-    out = out.replace(pattern, "[REDACTED]");
-  }
-  return out;
 }
 
 async function defaultReadRepoFile(

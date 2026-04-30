@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.11 (2026-04-30)
+
+### Changed
+
+- **Librarian activation scope**: softened the Bytes prompt overlay and `delegate_librarian` tool description to avoid over-delegating simple or local requests. Librarian is now framed for non-trivial external research that needs multiple sources, current docs/changelog verification, public code examples, library internals, or conflict reconciliation.
+- **Direct lookup guidance**: simple one-hop docs/web/GitHub lookups now prefer direct tools when available, while local codebase exploration stays on local tools instead of `delegate_librarian`.
+
+### Tests
+
+- Updated librarian prompt regression tests to cover the narrower trigger wording and direct-tool availability guard.
+
 ## 0.2.10 (2026-04-29)
 
 ### Changed

@@ -48,8 +48,12 @@ describe("bytes overlay rendering", () => {
 
   it("renders librarian-specific trigger guidance only when librarian is enabled", () => {
     const withLibrarian = renderPrompt("claude", [], ["librarian"]);
-    assert.ok(withLibrarian.includes("Prefer `librarian` for explicit, non-trivial"));
-    assert.ok(withLibrarian.includes("strong signal to call `delegate_librarian` first"));
+    assert.ok(
+      withLibrarian.includes("Consider `librarian` only for non-trivial external research"),
+    );
+    assert.ok(withLibrarian.includes("signals only when they clearly target external"));
+    assert.ok(withLibrarian.includes("simple one-hop lookups"));
+    assert.ok(withLibrarian.includes("tools when available instead"));
     assert.ok(withLibrarian.includes('"tìm hiểu"'));
 
     const withoutLibrarian = renderPrompt(
@@ -57,8 +61,8 @@ describe("bytes overlay rendering", () => {
       ["web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
       ["explore"],
     );
-    assert.ok(!withoutLibrarian.includes("Prefer `librarian` for explicit, non-trivial"));
-    assert.ok(!withoutLibrarian.includes("strong signal to call `delegate_librarian` first"));
+    assert.ok(!withoutLibrarian.includes("Consider `librarian` only for non-trivial"));
+    assert.ok(!withoutLibrarian.includes("signals only when they clearly target external"));
     assert.ok(!withoutLibrarian.includes('"tìm hiểu"'));
   });
 

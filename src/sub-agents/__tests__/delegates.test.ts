@@ -303,9 +303,9 @@ describe("delegate_librarian", () => {
 
   it("documents non-trivial research triggers and external-content safety", () => {
     assert.match(librarianDeclaration.description, /non-trivial external research/);
-    assert.match(librarianDeclaration.description, /purely local, trivial/);
-    assert.match(librarianDeclaration.description, /URLs that require external research/);
-    assert.match(librarianDeclaration.description, /open-source internals/);
+    assert.match(librarianDeclaration.description, /multi-source external research/);
+    assert.match(librarianDeclaration.description, /when available for simple one-hop lookups/);
+    assert.match(librarianDeclaration.description, /purely local codebase exploration/);
 
     const systemPrompt = librarianDeclaration.systemPrompt ?? "";
     assert.ok(systemPrompt.includes("## External Content Safety"));

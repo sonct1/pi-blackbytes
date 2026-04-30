@@ -103,13 +103,13 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   name: "librarian",
   toolName: "delegate_librarian",
   description:
-    "Delegate external-library, documentation, API, or open-source research to the Librarian sub-agent. " +
-    "Use proactively when the user asks to research, investigate, look up, or learn about " +
-    "a library, framework, package, SDK, API, CLI, model feature, protocol, external docs " +
-    "topic, open-source internals, real-world examples, changelogs, or URLs that require " +
-    "external research. Prefer this over primary web/docs/GitHub lookup when the request " +
-    "needs non-trivial external research, unless the request is purely local, trivial, or " +
-    "the user asks you not to. " +
+    "Delegate non-trivial external research about libraries, documentation, APIs, " +
+    "open-source examples, or specific URLs to the Librarian sub-agent. Use it when " +
+    "the request requires multi-source external research, such as official docs plus " +
+    "changelog/version checks, public GitHub examples, library internals, or reconciling " +
+    "conflicting/current information. Prefer direct web/docs/GitHub tools from the " +
+    "primary agent when available for simple one-hop lookups. Do not use it for " +
+    "purely local codebase exploration or trivial facts, and respect explicit user opt-outs. " +
     "The sub-agent has web search, Context7 docs, and GitHub code search capabilities.",
   parameters: Type.Object({
     question: Type.String({

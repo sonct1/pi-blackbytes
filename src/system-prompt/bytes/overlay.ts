@@ -24,9 +24,9 @@ function buildSessionCapabilitiesBody(context: BytesPromptRenderContext): string
 
   if (context.enabledSubAgents.has("librarian")) {
     lines.push(
-      "- Prefer `librarian` for explicit, non-trivial research requests about external " +
-        "libraries, frameworks, packages, APIs, docs, open-source internals, examples, " +
-        "changelogs, or URLs.",
+      "- Consider `librarian` only for non-trivial external research that requires " +
+        "multiple sources, current official docs/changelog verification, public code " +
+        "examples, or external library/API internals.",
     );
   }
 
@@ -95,10 +95,11 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
 
   if (context.enabledSubAgents.has("librarian")) {
     lines.push(
-      '- Treat user phrases like "research", "look up", "investigate", "tìm hiểu", ' +
-        'or "tra cứu" about external docs/library/API topics as a strong signal to call ' +
-        "`delegate_librarian` first when external lookup is needed, unless the task is " +
-        "purely local, trivial, or the user explicitly opts out.",
+      '- Treat phrases like "research", "look up", "investigate", "tìm hiểu", or ' +
+        '"tra cứu" as `librarian` signals only when they clearly target external ' +
+        "docs/libraries/APIs and need multi-source or current research; for local " +
+        "work or simple one-hop lookups, use local tools or direct docs/web/GitHub " +
+        "tools when available instead.",
     );
   }
 

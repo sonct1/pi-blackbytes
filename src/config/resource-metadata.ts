@@ -16,6 +16,9 @@ export const TOOL_NAMES = {
   DOCS_RESOLVE: "docs_resolve",
   DOCS_QUERY: "docs_query",
   GH_SEARCH: "gh_search",
+  HANDOFF: "handoff",
+  BYTES_TODO: "bytes_todo",
+  LOOK_AT: "look_at",
 } as const;
 
 export interface ToolMeta {
@@ -161,5 +164,7 @@ export function derivePromptFeatureFlags(
     documentationLookup: enabledTools.has(TOOL_NAMES.DOCS_QUERY),
     githubCodeSearch: enabledTools.has(TOOL_NAMES.GH_SEARCH),
     webSearch: enabledTools.has(TOOL_NAMES.WEB_SEARCH) || enabledTools.has(TOOL_NAMES.WEB_FETCH),
+    handoffEnabled: enabledTools.has(TOOL_NAMES.HANDOFF),
+    taskListEnabled: enabledTools.has(TOOL_NAMES.BYTES_TODO),
   };
 }

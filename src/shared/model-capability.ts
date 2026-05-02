@@ -1,4 +1,4 @@
-export type ModelFamily = "claude" | "gpt" | "gemini" | "other";
+export type ModelFamily = "claude" | "gpt" | "gemini" | "kimi" | "other";
 
 export const DEFAULT_PROMPT_MODEL_FAMILY: ModelFamily = "claude";
 
@@ -9,6 +9,7 @@ export function classifyModel(modelId: string): ModelFamily {
     return "gpt";
   }
   if (id.includes("gemini")) return "gemini";
+  if (id.includes("kimi") || id.includes("moonshot")) return "kimi";
   return "other";
 }
 

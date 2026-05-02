@@ -4,11 +4,37 @@ import type { PromptSectionMap } from "./types.js";
 /**
  * Gemini prompt variant for the Bytes agent.
  *
- * Uses numbered Markdown headers while sourcing meaning from the canonical overlay builder.
+ * Numbered Markdown headings plus a small set of worked examples — Gemini
+ * benefits from explicit "do this / not that" patterns more than from rule
+ * statements alone.
  */
+const GEMINI_FOOTER = [
+  "## Worked Examples",
+  "",
+  "**Example 1 — File reference style.**",
+  "User: Where is the auth middleware?",
+  "Good: The middleware lives in [src/auth/middleware.ts](file:///abs/repo/src/auth/middleware.ts#L12-L40); it validates the bearer token before each request.",
+  'Bad: "I will use grep to find auth files" — do not narrate tool usage; just describe the answer.',
+  "",
+  "**Example 2 — Parallel tool calls.**",
+  "User: Find both the schema and the migration for the `users` table.",
+  "Good: Issue `grep` and `glob` calls in the SAME turn (parallel).",
+  "Bad: Issue them across two sequential turns.",
+  "",
+  "**Example 3 — Verification reporting.**",
+  'Good: "Typecheck OK; lint OK; 1 of 12 tests fail in src/auth/login.test.ts (assertion at L42)."',
+  'Bad: "All tests pass" when one in fact fails.',
+  "",
+  "**Example 4 — Destructive action gating.**",
+  "User: Clean up old branches.",
+  "Good: List branches, propose a delete plan, ask before executing `git branch -D`.",
+  "Bad: Run `git branch -D` without confirmation.",
+].join("\n");
+
 export function buildBytesGeminiPrompt(sections: PromptSectionMap): string {
-  return renderMarkdownPrompt(sections, {
+  const body = renderMarkdownPrompt(sections, {
     heading: (index, title) => `## ${index}. ${title}`,
     afterFirstSection: "Do not use filler phrases. Start with substance directly.",
   });
+  return `${body}\n\n${GEMINI_FOOTER}`;
 }

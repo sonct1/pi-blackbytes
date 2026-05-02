@@ -1,5 +1,175 @@
 # Changelog
 
+## 2.0.0 (Unreleased) — Bytes v2
+
+This is a **major** release that overhauls Bytes system prompts and sub-agent
+behaviour to bring them closer to AmpCode-grade quality, and **fixes the main
+pain point**: Librarian was previously over-eager to fire on phrases like
+"research" / "tìm hiểu" / "investigate" even for trivial single-source lookups.
+
+### Migration guide (breaking changes)
+
+1. **Explore output format changed** from custom XML wrappers
+   (`<results>`, `<files>`, `<answer>`, `<next_steps>`) to plain Markdown with
+   fluent `file://` links. If you had downstream code that parsed the XML
+   format you must switch to parsing the Markdown bullet list. The new shape:
+
+   ```text
+   <one- to two-sentence summary>
+
+   - [src/auth/login.ts#L42-L80](file:///abs/repo/src/auth/login.ts#L42-L80) — short reason
+   - …
+
+   <optional 1-line next step>
+   ```
+
+2. **Bytes overlay grew** from ~4.3 KB to ~10–11 KB rendered (still under the
+   12 KB budget). Sections added:
+   - `identity`
+   - `autonomy_and_persistence`
+   - `investigate_before_acting`
+   - `tool_use_protocol`
+   - `verification_contract`
+   - `executing_actions_with_care`
+   - `markdown_format`
+   - `file_references`
+   - `final_status_spec`
+
+   The legacy XML wrapper tag `<agency>` (Claude variant) was renamed to
+   `<precedence>` to match the section key. If you scraped the prompt for
+   `<agency>` you must update to `<precedence>`.
+
+3. **New `kimi` model family.** `model.family` may now be `"kimi"` for
+   Kimi/Moonshot models. The default routing remains `claude → default.ts`,
+   `gpt → gpt.ts`, `gemini → gemini.ts`, plus the new `kimi → kimi.ts`.
+
+4. **Librarian gating is now strict.** Calls that previously succeeded on
+   single-URL fetches, single-library docs lookups, single-GitHub searches,
+   or local-codebase questions are now explicitly listed as anti-patterns in
+   both the tool description and the Bytes overlay. See "Phase 1.6" below.
+
+### Phase 0 — Baseline
+
+- Added `scripts/snapshot-prompts.ts`: dumps per-agent character count,
+  section count, and top headings for every builtin sub-agent + every Bytes
+  overlay variant. Used as the v1 → v2 baseline.
+- Added 6 librarian-gating fixtures (L1–L6) in
+  `src/sub-agents/__tests__/librarian-gating.test.ts`. Each fixture exercises
+  a representative request and asserts the rendered guidance + tool
+  description correctly classify it as `delegate` or `direct`. All 6
+  fixtures pass after the Phase 1.6 fix.
+- Baseline metrics (rendered chars):
+  - Pre-rework: claude/other 4317, gpt 4342, gemini 4224, kimi n/a.
+  - Post-rework: claude/other 10111, gpt 10430, gemini 10636, kimi 9853.
+  - Gzip package size: 107 KB (well under 500 KB budget).
+
+### Phase 1.6 — Librarian gating hardening (PRIORITY pain-point fix)
+
+- **`librarianDeclaration.description`** rewritten with the strict template:
+  - ALL of (a) external information not in repo, (b) MULTIPLE independent
+    sources or current-year answer, (c) direct tools each insufficient.
+  - Explicit `DO NOT use for` denylist (≥5 cases): single URL fetch, single
+    library docs lookup, single GitHub search, local-codebase questions,
+    trivial facts.
+  - Cost signal: ~5–10× more tokens and latency than a direct tool call.
+- **Bytes overlay**: removed the loose keyword-trigger block that previously
+  let phrases like `"research" / "tìm hiểu" / "tra cứu" / "investigate"`
+  fire `librarian` on their own. Replaced with the same strict (a)+(b)+(c)
+  gate plus an explicit "keyword triggers are NOT sufficient by themselves"
+  reminder.
+- **Cost signal in Session Capabilities**: every `delegate_*` call now
+  carries an explicit "~5–10× more tokens and latency than a direct tool
+  call — prefer direct tools when 1–2 calls suffice" warning when delegation
+  is enabled.
+
+### Phase 1.1–1.4 — Bytes overlay upgrade
+
+- Added `identity`, `autonomy_and_persistence`, `investigate_before_acting`,
+  `tool_use_protocol`, `verification_contract`,
+  `executing_actions_with_care`, `markdown_format`, `file_references`,
+  `final_status_spec` sections — each adapted from the Amp Smart QT4
+  reference and trimmed for compactness.
+- `verification_contract` introduces a typecheck → lint → test → build gate
+  order, faithful-reporting rule, and explicit "do not hard-code expected
+  values to satisfy a test" rule.
+- `tool_use_protocol` codifies parallel tool calls, the `cwd` parameter
+  rule, the `rg`-over-`grep` preference, and the "do not refer to tools by
+  name in user prose" rule.
+- `file_references` documents the fluent `file://` link form with
+  URL-encoding rules.
+- `final_status_spec` gives a 2–10 line completion report shape.
+
+### Phase 1.5 — 4 provider variants
+
+- `default.ts` (Claude) now wraps each section in semantic XML tags
+  (`<identity>`, `<precedence>`, `<verification>`, `<engineering>`,
+  `<workflow>`, `<completion>`, etc.).
+- `gpt.ts` appends explicit **Verification Gates** (1. Typecheck, 2. Lint,
+  3. Tests, 4. Build) and a **Parallel Execution Policy** footer.
+- `gemini.ts` appends 4 worked examples (file-reference style, parallel
+  tool calls, verification reporting, destructive-action gating).
+- **NEW** `kimi.ts` for Kimi/Moonshot models — terse markdown,
+  instruction-dense, no worked examples.
+- `loader.ts` routing now covers all 5 families: `claude`, `gpt`, `gemini`,
+  `kimi`, `other` (defaults to claude renderer).
+
+### Phase 2 — Sub-agent polish
+
+- **Explore (BREAKING)**: legacy XML output (`<results>/<files>/<answer>/
+  <next_steps>`) replaced with Markdown + fluent `file://` links. New
+  guidance: ≥6 parallel tool calls per turn when scope is wide, complete
+  within 3 turns, prefer source code over docs, scope globs aggressively
+  (`core/**/*x*` not `**/*x*`).
+- **Oracle**: prepended an "IMPORTANT — Self-contained final message"
+  preamble (only the last message returns to the caller). Added fluent
+  `file://` link rule. Effort estimate template (Quick/Short/Medium/Large)
+  preserved unchanged — that's still a strength.
+- **Reviewer**: caller MUST pre-fetch with
+  `git diff --merge-base origin/HEAD HEAD` and pass the diff in `context`
+  (Reviewer remains read-only, no `bash`/`git` in allowlist). Added abort
+  rule for >100 files / >10 K lines, abstraction-fit evaluation
+  (over-/under-abstraction), and a runtime `console.warn` when
+  `delegate_reviewer` is invoked with empty/short `context`.
+- **General**: added a `### Hard Rules` line: "Verification gate order:
+  typecheck → lint → test → build — use AGENTS.md commands; report counts
+  honestly".
+- **Librarian**: added Local File References section with the fluent
+  `file://` link form for repo files (external citations remain on the
+  GitHub permalink / official docs URL form).
+
+### Phase 3 — UX & communication (folded into Phase 1)
+
+- Channel separation, Markdown strict rules, and final-status spec all live
+  in the Bytes overlay sections (`final_status_spec`, `markdown_format`,
+  `work_defaults`).
+
+### Phase 4 — New capabilities (deferred)
+
+The following are scoped but not yet implemented:
+
+- `handoff` tool (spawn nested `pi -p` with fresh context).
+- `code-tour` sub-agent (read-only numbered file:line walkthrough).
+- `look_at` tool (multimodal — pending Pi platform multimodal support).
+- `bytes_todo` lightweight in-memory TODO list (pending Pi `task_list` API
+  check).
+
+### Tests
+
+- 13 new tests in `src/sub-agents/__tests__/librarian-gating.test.ts`
+  (description gate + overlay gate + 6 fixtures L1–L6).
+- Existing `delegates.test.ts` librarian assertions updated to the new
+  (a)(b)(c) + denylist contract.
+- Existing `bytes-overlay.test.ts` librarian-trigger assertions updated for
+  the new strict gating wording.
+- `loader.test.ts` XML-tag assertion updated from `<agency>` to
+  `<identity>` / `<precedence>` / `<verification>`.
+
+### Tooling
+
+- New `scripts/snapshot-prompts.ts` (run with `node --import tsx
+  scripts/snapshot-prompts.ts`) prints per-agent + per-overlay-variant
+  character / section / heading stats.
+
 ## 0.2.12 (2026-04-30)
 
 ### Added

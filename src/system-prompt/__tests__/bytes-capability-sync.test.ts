@@ -17,7 +17,12 @@ beforeEach(() => {
   for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
 });
 
-const CAPABILITY_SNIPPETS: Record<PromptFeatureKey, string> = {
+/**
+ * Features with backing metadata resources. Reserved flags without backing
+ * resources (handoffEnabled, taskListEnabled) are excluded — they are always
+ * false until their tools are implemented.
+ */
+const CAPABILITY_SNIPPETS: Partial<Record<PromptFeatureKey, string>> = {
   hashlineEdit: "Hashline Edit Workflow",
   subagentDelegation: "Delegate when specialization materially reduces",
   documentationLookup: "Documentation lookup may be available",
@@ -90,50 +95,52 @@ describe("prompt-to-runtime capability sync", () => {
       documentationLookup: true,
       githubCodeSearch: true,
       webSearch: true,
+      handoffEnabled: false,
+      taskListEnabled: false,
     });
   });
 
   it("renders hashline guidance only when hashline metadata-backed resources are enabled", () => {
     const prompt = renderPromptForFeature("hashlineEdit");
-    assert.ok(prompt.includes(CAPABILITY_SNIPPETS.hashlineEdit));
+    assert.ok(prompt.includes(CAPABILITY_SNIPPETS.hashlineEdit!));
 
     const withoutHashline = renderBytesPrompt(
       createBytesPromptRenderContext("claude", new Set<string>(), new Set<string>()),
     );
-    assert.ok(!withoutHashline.includes(CAPABILITY_SNIPPETS.hashlineEdit));
+    assert.ok(!withoutHashline.includes(CAPABILITY_SNIPPETS.hashlineEdit!));
   });
 
   it("renders delegation guidance only when delegation-backed sub-agents are enabled", () => {
     const prompt = renderPromptForFeature("subagentDelegation");
-    assert.ok(prompt.includes(CAPABILITY_SNIPPETS.subagentDelegation));
+    assert.ok(prompt.includes(CAPABILITY_SNIPPETS.subagentDelegation!));
 
     const withoutDelegation = renderBytesPrompt(
       createBytesPromptRenderContext("claude", new Set<string>(), new Set<string>()),
     );
-    assert.ok(!withoutDelegation.includes(CAPABILITY_SNIPPETS.subagentDelegation));
+    assert.ok(!withoutDelegation.includes(CAPABILITY_SNIPPETS.subagentDelegation!));
   });
 
   it("renders documentation lookup guidance only when docs-backed resources are enabled", () => {
     const docsPrompt = renderPromptForFeature("documentationLookup");
-    assert.ok(docsPrompt.includes(CAPABILITY_SNIPPETS.documentationLookup));
+    assert.ok(docsPrompt.includes(CAPABILITY_SNIPPETS.documentationLookup!));
 
     const webPrompt = renderPromptForFeature("webSearch");
-    assert.ok(!webPrompt.includes(CAPABILITY_SNIPPETS.documentationLookup));
+    assert.ok(!webPrompt.includes(CAPABILITY_SNIPPETS.documentationLookup!));
   });
 
   it("renders web lookup guidance only when web-backed resources are enabled", () => {
     const webPrompt = renderPromptForFeature("webSearch");
-    assert.ok(webPrompt.includes(CAPABILITY_SNIPPETS.webSearch));
+    assert.ok(webPrompt.includes(CAPABILITY_SNIPPETS.webSearch!));
 
     const docsPrompt = renderPromptForFeature("documentationLookup");
-    assert.ok(!docsPrompt.includes(CAPABILITY_SNIPPETS.webSearch));
+    assert.ok(!docsPrompt.includes(CAPABILITY_SNIPPETS.webSearch!));
   });
 
   it("renders GitHub code search guidance only when grep_app metadata-backed resources are enabled", () => {
     const prompt = renderPromptForFeature("githubCodeSearch");
-    assert.ok(prompt.includes(CAPABILITY_SNIPPETS.githubCodeSearch));
+    assert.ok(prompt.includes(CAPABILITY_SNIPPETS.githubCodeSearch!));
 
     const withoutCodeSearch = renderPromptForFeature("documentationLookup");
-    assert.ok(!withoutCodeSearch.includes(CAPABILITY_SNIPPETS.githubCodeSearch));
+    assert.ok(!withoutCodeSearch.includes(CAPABILITY_SNIPPETS.githubCodeSearch!));
   });
 });

@@ -51,10 +51,9 @@ describe("bytes overlay rendering", () => {
     assert.ok(
       withLibrarian.includes("Consider `librarian` only for non-trivial external research"),
     );
-    assert.ok(withLibrarian.includes("signals only when they clearly target external"));
-    assert.ok(withLibrarian.includes("simple one-hop lookups"));
-    assert.ok(withLibrarian.includes("tools when available instead"));
-    assert.ok(withLibrarian.includes('"tìm hiểu"'));
+    assert.ok(withLibrarian.includes("Librarian gating (strict)"));
+    assert.ok(withLibrarian.includes("DO NOT delegate to `librarian`"));
+    assert.ok(withLibrarian.includes("NOT sufficient by themselves"));
 
     const withoutLibrarian = renderPrompt(
       "claude",
@@ -62,8 +61,8 @@ describe("bytes overlay rendering", () => {
       ["explore"],
     );
     assert.ok(!withoutLibrarian.includes("Consider `librarian` only for non-trivial"));
-    assert.ok(!withoutLibrarian.includes("signals only when they clearly target external"));
-    assert.ok(!withoutLibrarian.includes('"tìm hiểu"'));
+    assert.ok(!withoutLibrarian.includes("Librarian gating (strict)"));
+    assert.ok(!withoutLibrarian.includes("DO NOT delegate to `librarian`"));
   });
 
   it("renders sub-agent trigger guidance only for enabled sub-agents", () => {

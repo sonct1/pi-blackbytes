@@ -95,6 +95,15 @@ When a primary tool fails or returns nothing useful, fall back deliberately:
 - If documentation conflicts with real-world usage, flag the discrepancy explicitly.
 - Be concise. Do not narrate tool usage ("I'll search the codebase…") — just report findings with citations.
 
+## Local File References
+
+When you reference a **local** file (e.g. an AGENTS.md or repo file you read
+with \`read\`), use the fluent \`file://\` link form:
+\`[relpath#L-L](file:///abs/path#L-L)\`. URL-encode special characters
+(\`%20\` for spaces, \`%28\`/\`%29\` for parens). For **external** sources
+continue to follow the Citation Policy above (GitHub permalink, official
+docs URL, etc.) — do not convert remote URLs to \`file://\`.
+
 ## Language Matching
 
 Detect the language the user writes in and respond in the same language. Keep code, technical terms, library names, URLs, and structured findings in English.`;
@@ -103,13 +112,18 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   name: "librarian",
   toolName: "delegate_librarian",
   description:
-    "Delegate non-trivial external research about libraries, documentation, APIs, " +
-    "open-source examples, or specific URLs to the Librarian sub-agent. Use it when " +
-    "the request requires multi-source external research, such as official docs plus " +
-    "changelog/version checks, public GitHub examples, library internals, or reconciling " +
-    "conflicting/current information. Prefer direct web/docs/GitHub tools from the " +
-    "primary agent when available for simple one-hop lookups. Do not use it for " +
-    "purely local codebase exploration or trivial facts, and respect explicit user opt-outs. " +
+    "Delegate to the Librarian ONLY when ALL of these hold: " +
+    "(a) the question requires EXTERNAL information not in the local repo; AND " +
+    "(b) it needs MULTIPLE independent sources (official docs + version-aware changelog + " +
+    "real-world public examples) or an authoritative current-year answer that may have " +
+    "changed; AND (c) direct tools (`docs_resolve`/`docs_query`/`web_search`/`web_fetch`/" +
+    "`gh_search`) would each be insufficient on their own. " +
+    "DO NOT use for: a single URL fetch (use `web_fetch`); a single library docs lookup " +
+    "(`docs_resolve` → `docs_query`); a single GitHub code search (`gh_search`); " +
+    "local-codebase questions (use `delegate_explore` or `grep`/`glob`/`ast_search`); " +
+    "trivial facts or restating known information. " +
+    "Cost signal: ~5–10× more tokens and latency than a direct tool call — prefer " +
+    "direct tools when 1–2 calls would suffice. " +
     "The sub-agent has web search, Context7 docs, and GitHub code search capabilities.",
   parameters: Type.Object({
     question: Type.String({

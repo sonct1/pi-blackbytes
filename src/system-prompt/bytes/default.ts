@@ -1,18 +1,31 @@
 import { renderXmlPrompt } from "./render.js";
-import type { PromptSectionMap } from "./types.js";
+import type { PromptSectionKey, PromptSectionMap } from "./types.js";
 
 /**
  * Default (Claude/Anthropic) prompt variant for the Bytes agent.
  *
- * Uses XML-style wrappers while sourcing meaning from the canonical overlay builder.
+ * Uses XML-style wrappers, mirroring the Amp Smart QT4 structure.
  */
+const CLAUDE_TAGS: Record<PromptSectionKey, string> = {
+  identity: "identity",
+  precedence: "precedence",
+  autonomy_and_persistence: "autonomy_and_persistence",
+  investigate_before_acting: "investigate_before_acting",
+  session_capabilities: "capabilities",
+  hard_boundaries: "engineering",
+  work_defaults: "workflow_defaults",
+  tool_use_protocol: "tool_use",
+  verification_contract: "verification",
+  executing_actions_with_care: "executing_actions_with_care",
+  conditional_workflows: "workflow",
+  handoff_protocol: "handoff_protocol",
+  task_list_protocol: "task_list_protocol",
+  markdown_format: "markdown_format",
+  file_references: "file_references",
+  final_status_spec: "final_status",
+  completion_contract: "completion",
+};
+
 export function buildBytesDefaultPrompt(sections: PromptSectionMap): string {
-  return renderXmlPrompt(sections, {
-    precedence: "agency",
-    session_capabilities: "capabilities",
-    hard_boundaries: "engineering",
-    work_defaults: "workflow_defaults",
-    conditional_workflows: "workflow",
-    completion_contract: "completion",
-  });
+  return renderXmlPrompt(sections, CLAUDE_TAGS);
 }

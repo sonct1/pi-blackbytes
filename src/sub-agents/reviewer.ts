@@ -28,6 +28,10 @@ Find **real** issues in changed code:
 - Incorrect assumptions, edge-case failures, type / API mismatches.
 - Security risks (injection, trust-boundary violations, credential exposure).
 - Confusing logic with practical impact, missing verification for risky changes.
+- **Abstraction fit**: flag *over-abstraction* (premature helpers, single-use
+  factories, speculative generics) AND *under-abstraction* (duplicated logic,
+  missing extraction that would materially reduce risk). Quote a representative
+  line and propose a concrete direction.
 
 Do NOT nitpick formatting, naming, or style unless the repository's documented conventions clearly require it. Do NOT suggest broad refactors or speculative improvements.
 
@@ -39,7 +43,19 @@ Your input may include any of:
 - A commit hash, branch name, or PR URL/number — used as a label, since you cannot run git yourself.
 - Specific instructions ("focus on the auth changes").
 
-If the input is empty, vague, or contains only a commit/branch/PR identifier without a diff, say so explicitly and ask the caller to include the actual diff or file list. Do NOT invent changes.
+The caller is expected to pre-fetch context with commands like
+\`git diff --merge-base origin/HEAD HEAD\` and
+\`git ls-files --others --exclude-standard\`, then pass the result as
+\`context\`. If the input is empty, vague, or contains only a commit/branch/PR
+identifier without a diff, say so explicitly and ask the caller to run those
+git commands and re-invoke. Do NOT invent changes.
+
+## Scope Limits
+
+- **Abort early on oversized reviews.** If the diff covers >100 files OR
+  >10,000 changed lines, do NOT attempt a full review. Report the size,
+  list the top files by churn, and ask the caller to slice the review
+  (per subdirectory, per concern, or per commit).
 
 ## Review Workflow
 
@@ -134,8 +150,28 @@ export const reviewerDeclaration = defineSubAgent<{
   finalizeMode: "strict",
   source: "builtin",
   staticOverrides: { timeoutMs: 900_000 },
-  buildUserPrompt: (p) =>
-    p.context ? `${p.request}\n\n---\n\nReview context:\n${p.context}` : p.request,
+  buildUserPrompt: (p) => {
+    // Diagnostic: warn the host when reviewer is invoked without a meaningful
+    // diff/context. Reviewer cannot run git itself, so empty context almost
+    // always produces a degraded review. Stay non-fatal — caller may have
+    // pasted a small focused snippet on purpose. Suppressed under node:test
+    // to keep test output clean.
+    const ctx = p.context?.trim() ?? "";
+    const inTest = !!process.env.NODE_TEST_CONTEXT;
+    if (!inTest) {
+      if (ctx.length === 0) {
+        console.warn(
+          "[blackbytes:delegate_reviewer] called with empty `context`; expect degraded review. " +
+            "Pre-fetch with `git diff --merge-base origin/HEAD HEAD` and pass the diff in `context`.",
+        );
+      } else if (ctx.length < 64) {
+        console.warn(
+          `[blackbytes:delegate_reviewer] \`context\` is very short (${ctx.length} chars). Verify the diff was passed in full.`,
+        );
+      }
+    }
+    return p.context ? `${p.request}\n\n---\n\nReview context:\n${p.context}` : p.request;
+  },
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildSubAgentRuntimeOverlay({
       agentName: "reviewer",

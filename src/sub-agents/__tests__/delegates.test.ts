@@ -301,11 +301,19 @@ describe("delegate_librarian", () => {
     assert.ok(!pi.registeredTools.has("delegate_librarian"));
   });
 
-  it("documents non-trivial research triggers and external-content safety", () => {
-    assert.match(librarianDeclaration.description, /non-trivial external research/);
-    assert.match(librarianDeclaration.description, /multi-source external research/);
-    assert.match(librarianDeclaration.description, /when available for simple one-hop lookups/);
-    assert.match(librarianDeclaration.description, /purely local codebase exploration/);
+  it("documents strict (a)(b)(c) gating, anti-pattern denylist, and external-content safety", () => {
+    // Gating contract — ALL of (a)(b)(c) must hold.
+    assert.match(librarianDeclaration.description, /ONLY when ALL of these hold/);
+    assert.match(librarianDeclaration.description, /\(a\) the question requires EXTERNAL/);
+    assert.match(librarianDeclaration.description, /\(b\) it needs MULTIPLE independent sources/);
+    assert.match(librarianDeclaration.description, /\(c\) direct tools/);
+    // Anti-pattern denylist.
+    assert.match(librarianDeclaration.description, /DO NOT use/);
+    assert.match(librarianDeclaration.description, /single URL fetch/);
+    assert.match(librarianDeclaration.description, /single library docs lookup/);
+    assert.match(librarianDeclaration.description, /local-codebase questions/);
+    // Cost signal.
+    assert.match(librarianDeclaration.description, /5–10×|5-10×|5–10x|5-10x/);
 
     const systemPrompt = librarianDeclaration.systemPrompt ?? "";
     assert.ok(systemPrompt.includes("## External Content Safety"));

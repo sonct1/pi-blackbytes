@@ -2,6 +2,7 @@ import { type ModelFamily, resolvePromptModelFamily } from "../shared/model-capa
 import { buildBytesDefaultPrompt } from "./bytes/default.js";
 import { buildBytesGeminiPrompt } from "./bytes/gemini.js";
 import { buildBytesGptPrompt } from "./bytes/gpt.js";
+import { buildBytesKimiPrompt } from "./bytes/kimi.js";
 import {
   buildBytesPromptSectionMap,
   createStaticBytesPromptRenderContext,
@@ -21,6 +22,7 @@ const FAMILY_TO_RENDERER: Record<ModelFamily, PromptRenderer> = {
   claude: buildBytesDefaultPrompt,
   gpt: buildBytesGptPrompt,
   gemini: buildBytesGeminiPrompt,
+  kimi: buildBytesKimiPrompt,
   other: buildBytesDefaultPrompt,
 };
 

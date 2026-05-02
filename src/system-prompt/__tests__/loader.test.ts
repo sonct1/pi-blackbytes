@@ -46,9 +46,13 @@ describe("loadBytesPrompt", () => {
     const gpt = loadBytesPrompt("gpt");
     const gemini = loadBytesPrompt("gemini");
     // Claude uses XML tags
-    assert.ok(claude.includes("<agency>"));
-    assert.ok(!gpt.includes("<agency>"));
-    assert.ok(!gemini.includes("<agency>"));
+    assert.ok(claude.includes("<identity>"));
+    assert.ok(claude.includes("<precedence>"));
+    assert.ok(claude.includes("<verification>"));
+    assert.ok(!gpt.includes("<identity>"));
+    assert.ok(!gpt.includes("<precedence>"));
+    assert.ok(!gemini.includes("<identity>"));
+    assert.ok(!gemini.includes("<precedence>"));
     // GPT uses filler blacklist
     assert.ok(gpt.includes("NEVER open with filler"));
     // Gemini uses numbered sections

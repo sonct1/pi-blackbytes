@@ -2,6 +2,45 @@
 
 Pi coding-agent extension that provides local search tools, direct HTTP replacements for the websearch/context7/grep.app MCP surfaces, hashline-based editing, and delegated sub-agents for exploration, research, consultation, implementation, and code review.
 
+## What's new in v2 (Bytes v2)
+
+`v2.0.0` is a major rework of the Bytes system prompts and sub-agent
+behaviour. Highlights:
+
+- **Strict Librarian gating.** `delegate_librarian` now requires ALL of
+  (a) external information, (b) multiple independent sources or current-year
+  authority, (c) direct tools individually insufficient — plus an explicit
+  anti-pattern denylist. The previous "fires on the word `research`" failure
+  mode is fixed.
+- **Bytes overlay expansion.** New sections covering identity, autonomy &
+  persistence, investigate-before-acting, tool-use protocol, verification
+  contract, executing-actions-with-care, markdown format, file references,
+  and final-status spec — all capability-aware.
+- **Four provider variants** (was three). Added a new `kimi` family for
+  Kimi/Moonshot models (terse, instruction-dense markdown). `gpt` got an
+  explicit Verification Gates + Parallel Execution Policy footer; `gemini`
+  got 4 worked examples; `claude` adopted semantic XML tags.
+- **Sub-agent polish.** Explore output switched from custom XML to fluent
+  Markdown `file://` links (BREAKING). Oracle has a self-contained
+  final-message preamble. Reviewer enforces caller-side `git diff`
+  pre-fetch and warns on empty `context`. General + librarian got
+  verification-gate + fluent-link rules.
+
+See `CHANGELOG.md` for the full migration guide.
+
+### pi-blackbytes vs raw Pi
+
+| Capability | Raw Pi | pi-blackbytes |
+|---|---|---|
+| System prompt | Pi default | Bytes v2 overlay (capability-aware, per-family) |
+| Codebase exploration | `read`/`grep`/`glob` | + `delegate_explore` (parallel, scoped, fluent links) |
+| Reasoning consultation | (manual) | `delegate_oracle` (Effort estimate, self-contained reply) |
+| External research | (manual) | `delegate_librarian` (strict gate, multi-source) |
+| Code review | (manual) | `delegate_reviewer` (severity verdict, abstraction-fit eval) |
+| Heavy implementation | (manual) | `delegate_general` (verification gates, AGENTS.md aware) |
+| Edit workflow | `edit`/`write` | + `hashline_edit` (anchor-based) |
+| Web/docs lookup | (manual) | `web_search` / `web_fetch` / `docs_resolve` / `docs_query` / `gh_search` |
+
 ## Installation
 
 ```bash

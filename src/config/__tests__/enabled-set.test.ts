@@ -168,6 +168,8 @@ describe("enabled-set", () => {
         documentationLookup: true,
         githubCodeSearch: true,
         webSearch: true,
+        handoffEnabled: false,
+        taskListEnabled: false,
       });
     });
 
@@ -193,6 +195,8 @@ describe("enabled-set", () => {
         documentationLookup: false,
         githubCodeSearch: false,
         webSearch: false,
+        handoffEnabled: false,
+        taskListEnabled: false,
       });
     });
 
@@ -210,6 +214,8 @@ describe("enabled-set", () => {
         documentationLookup: false,
         githubCodeSearch: true,
         webSearch: true,
+        handoffEnabled: false,
+        taskListEnabled: false,
       });
     });
   });

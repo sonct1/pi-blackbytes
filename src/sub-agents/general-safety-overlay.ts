@@ -141,6 +141,13 @@ export async function buildGeneralSafetyOverlay(
     "- **Stay in scope.** Do not refactor, reformat, or rewrite files " +
       "outside the requested change set.",
   );
+  sections.push(
+    "- **Verification gate order.** Before claiming completion run " +
+      "`typecheck → lint → test → build` (use the project-defined commands " +
+      "from AGENTS.md / `package.json` scripts). Report each gate's outcome " +
+      "and counts honestly. Never weaken or skip a gate to fabricate a green " +
+      "result.",
+  );
 
   if (agentsMd) {
     sections.push("### Repository Constraints (from AGENTS.md)");

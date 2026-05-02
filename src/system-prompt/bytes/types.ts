@@ -1,11 +1,22 @@
 import type { ModelFamily } from "../../shared/model-capability.js";
 
 export type PromptSectionKey =
+  | "identity"
   | "precedence"
+  | "autonomy_and_persistence"
+  | "investigate_before_acting"
   | "session_capabilities"
   | "hard_boundaries"
   | "work_defaults"
+  | "tool_use_protocol"
+  | "verification_contract"
+  | "executing_actions_with_care"
   | "conditional_workflows"
+  | "handoff_protocol"
+  | "task_list_protocol"
+  | "markdown_format"
+  | "file_references"
+  | "final_status_spec"
   | "completion_contract";
 
 export interface PromptFeatureFlags {
@@ -14,6 +25,8 @@ export interface PromptFeatureFlags {
   readonly documentationLookup: boolean;
   readonly githubCodeSearch: boolean;
   readonly webSearch: boolean;
+  readonly handoffEnabled: boolean;
+  readonly taskListEnabled: boolean;
 }
 
 export interface PromptSection {
@@ -22,7 +35,7 @@ export interface PromptSection {
   readonly body: string;
 }
 
-export type PromptSectionMap = Record<PromptSectionKey, PromptSection>;
+export type PromptSectionMap = Partial<Record<PromptSectionKey, PromptSection>>;
 
 export type PromptRenderer = (sections: PromptSectionMap) => string;
 

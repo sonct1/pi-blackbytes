@@ -15,7 +15,6 @@ export type PromptSectionKey =
   | "handoff_protocol"
   | "markdown_format"
   | "file_references"
-  | "final_status_spec"
   | "completion_contract";
 
 export interface PromptFeatureFlags {

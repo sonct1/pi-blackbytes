@@ -8,17 +8,6 @@ import type { PromptSectionMap } from "./types.js";
  * tuned for GPT models that respond well to explicit ordered checklists.
  */
 const GPT_FOOTER = [
-  "## Verification Gates",
-  "",
-  "Before reporting completion, run these in order (skip a stage only if AGENTS.md says so):",
-  "",
-  "1. **Typecheck** — TypeScript / language-level type errors must be 0.",
-  "2. **Lint** — repository linter (Biome / ESLint / etc.) must pass.",
-  "3. **Tests** — relevant unit/integration tests must pass.",
-  "4. **Build** — final bundle/compile must succeed.",
-  "",
-  "Report each stage's outcome honestly. Do not weaken or skip a check to fabricate a green result.",
-  "",
   "## Parallel Execution Policy",
   "",
   "- ALWAYS issue independent reads, searches, and tool calls in a single turn.",

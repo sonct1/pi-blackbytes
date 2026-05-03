@@ -4,60 +4,24 @@ Pi coding-agent extension that provides local search tools, locally-managed HTTP
 
 > **Note on the wire protocol.** `web_search` / `web_fetch` (Exa, Tavily) and `docs_resolve` / `docs_query` (Context7) are pure REST clients — no MCP involved. `gh_search` is also locally-managed (no Pi MCP plugin needed) but the upstream `mcp.grep.app` service still speaks MCP-over-HTTP, so the extension ships a small in-process MCP HTTP client just for that one tool. The user-facing benefit (extension owns auth, config, error handling, render) is the same for all three groups; the wire-level distinction matters only if you are debugging requests.
 
-## What's new in v2 (Bytes v2)
+## Overview
 
-`v2.1.0` ships three "Phase 4" capabilities that were deferred from
-v2.0.0 — `handoff`, `code-tour`, and `look_at`. They are all additive and
-capability-gated, so disabling any of them removes both the tool and
-its prompt overlay section. A fourth capability (`bytes_todo`) was
-shipped briefly in a pre-release of v2.1.0 and then removed before
-release; see CHANGELOG.
+Blackbytes extends Pi with:
 
-`v2.0.0` was the major rework of the Bytes system prompts and sub-agent
-behaviour. Highlights:
-
-- **Strict Librarian gating.** `delegate_librarian` now requires ALL of
-  (a) external information, (b) multiple independent sources or current-year
-  authority, (c) direct tools individually insufficient — plus an explicit
-  anti-pattern denylist. The previous "fires on the word `research`" failure
-  mode is fixed.
-- **Bytes overlay expansion.** New sections covering identity, autonomy &
-  persistence, investigate-before-acting, tool-use protocol, verification
-  contract, executing-actions-with-care, markdown format, file references,
-  and final-status spec — all capability-aware.
-- **Four provider variants** (was three). Added a new `kimi` family for
-  Kimi/Moonshot models (terse, instruction-dense markdown). `gpt` got an
-  explicit Verification Gates + Parallel Execution Policy footer; `gemini`
-  got 4 worked examples; `claude` adopted semantic XML tags.
-- **Sub-agent polish.** Explore output switched from custom XML to fluent
-  Markdown `file://` links (BREAKING). Oracle has a self-contained
-  final-message preamble. Reviewer enforces caller-side `git diff`
-  pre-fetch and warns on empty `context`. General + librarian got
-  verification-gate + fluent-link rules.
-
-### New in v2.1.0
-
-- **`handoff` tool.** Spawn a fresh nested `pi -p` session with a
-  self-contained `goal` plus optional `mode` and `prior_summary` (4 KB
-  cap, secrets redacted). The `PI_NESTED_DEPTH` guard automatically
-  refuses recursive handoff. Default 30-minute timeout.
-- **`code-tour` sub-agent.** Read-only walk-through agent that returns a
-  numbered `[file#L-L](file://…)` list with one-line `what · why`
-  annotations. Use it when the caller needs to understand *how* an
-  existing flow works, not where files live.
-- **`look_at` tool.** Multimodal image inspector — loads a primary image
-  plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and
-  embeds them as `ImageContent` blocks alongside the analysis objective.
-
-See `CHANGELOG.md` for the full migration guide.
+- **Bytes v2 system prompt overlay** — capability-aware, per-model-family prompt with sections covering identity, autonomy, investigation rules, tool-use protocol, verification contracts, and workflow guidance. Four provider variants: `claude` (semantic XML tags), `gpt` (Markdown + Parallel Execution Policy footer), `gemini` (numbered headings + worked examples), and `kimi` (terse instruction-dense Markdown).
+- **Strict Librarian gating** — `delegate_librarian` requires ALL of (a) external information, (b) multiple independent sources or current-year authority, (c) direct tools individually insufficient — plus an explicit anti-pattern denylist.
+- **Five builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle, Librarian, General, and Reviewer, each with typed declarations, runtime overlays, model fallback chains (read-only agents), and per-agent timeout/model/reasoning configuration.
+- **Delegation ROI tracking** — in-memory session-scoped delegation log with per-agent metrics (call count, success rate, average duration, cost). Visible via `/blackbytes-status`.
+- **`handoff` tool** — spawn a fresh nested `pi -p` session with a self-contained `goal` plus optional `mode` and `prior_summary` (4 KB cap, secrets redacted). The `PI_NESTED_DEPTH` guard automatically refuses recursive handoff. Default 30-minute timeout.
+- **`look_at` tool** — multimodal image inspector that loads a primary image plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and embeds them as `ImageContent` blocks alongside the analysis objective.
+- **Fluent `file://` links** — sub-agent output uses `[relpath#L-L](file:///abs/path#L-L)` links throughout.
 
 ### pi-blackbytes vs raw Pi
 
 | Capability | Raw Pi | pi-blackbytes |
 |---|---|---|
 | System prompt | Pi default | Bytes v2 overlay (capability-aware, per-family) |
-| Codebase exploration | `read`/`grep`/`glob` | + `delegate_explore` (parallel, scoped, fluent links) |
-| Guided code walk-throughs | (manual) | `delegate_code_tour` (numbered file:line, what · why) |
+| Codebase exploration | `read`/`grep`/`glob` | + `delegate_explore` (parallel, scoped, fluent links, Tour Mode) |
 | Reasoning consultation | (manual) | `delegate_oracle` (Effort estimate, self-contained reply) |
 | External research | (manual) | `delegate_librarian` (strict gate, multi-source) |
 | Code review | (manual) | `delegate_reviewer` (severity verdict, abstraction-fit eval) |
@@ -66,6 +30,7 @@ See `CHANGELOG.md` for the full migration guide.
 | Image inspection | (none) | `look_at` (PNG/JPG/GIF/WebP/BMP/SVG, multi-image compare) |
 | Edit workflow | `edit`/`write` | + `hashline_edit` (anchor-based) |
 | Web/docs lookup | (manual) | `web_search` / `web_fetch` / `docs_resolve` / `docs_query` / `gh_search` |
+| Delegation observability | (none) | Delegation ROI log (per-agent metrics, visible in `/blackbytes-status`) |
 
 ## Installation
 
@@ -162,20 +127,21 @@ Tools: **14** enabled | Agents: **5** enabled | Skills: **2** enabled
 
 ### Section picker
 
-The picker presents 9 named sections plus a **Show All** option:
+The picker presents 10 named sections plus a **Show All** option:
 
-| # | Section |
-|---|---|
-| 1 | Enabled Tools |
-| 2 | Enabled Sub-Agents |
-| 3 | Enabled Skills |
-| 4 | Sub-Agent Snapshot |
-| 5 | YAML Diagnostics |
-| 6 | System Prompt Log |
-| 7 | Compact Tool Output |
-| 8 | Reserved / Unsupported Settings |
-| 9 | Full Config (JSON) |
-| — | Show All |
+| # | Section | Description |
+|---|---|---|
+| 1 | Enabled Tools | Lists all registered tool names with their enabled/disabled state |
+| 2 | Enabled Sub-Agents | Lists builtin and YAML sub-agents with their enabled/disabled state |
+| 3 | Enabled Skills | Lists discovered Pi skills |
+| 4 | Delegation ROI | Session-scoped delegation metrics: per-agent call count, success rate, average duration, and accumulated cost |
+| 5 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
+| 6 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
+| 7 | System Prompt Log | Current system prompt logging configuration |
+| 8 | Compact Tool Output | Compact tool rendering state and `/toggle-verbose` status |
+| 9 | Reserved / Unsupported Settings | Settings accepted by schema but not yet functional (e.g. `temperature`) |
+| 10 | Full Config (JSON) | Raw `blackbytes` config object with secrets redacted |
+| — | Show All | Prints all sections in order |
 
 Selecting a numbered section prints the overview header followed by that section only. Selecting **Show All** or pressing **Cancel** prints the full output, preserving backward-compatible behaviour.
 
@@ -312,7 +278,7 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 
 | Tool | Icon | Purpose |
 |---|---|---|
-| `delegate_explore` | 🔭 | Read-only codebase discovery for "where is X?" work |
+| `delegate_explore` | 🔭 | Read-only codebase discovery and flow walk-throughs ("Where is X?", "How does Y work?") |
 | `delegate_oracle` | 🧠 | Read-only high-reasoning consultation for difficult debugging or design questions |
 | `delegate_librarian` | 📚 | Read-only docs, web, and cross-repository research |
 | `delegate_general` | ⚡ | Full-access execution for well-scoped multi-file implementation work |
@@ -435,7 +401,7 @@ The final delegate result remains a concise text block returned after the nested
 
 ## Delegation model
 
-- **Explore** locates files, symbols, and call sites in the local repository.
+- **Explore** locates files, symbols, and call sites in the local repository. In Tour Mode, it traces execution flows and returns numbered `[file#L-L](file://…)` steps with `what · why` annotations — use it when you need to understand *how* a flow works, not just where files live. Accepts an optional `context` parameter to scope the search.
 - **Oracle** handles hard architectural reasoning and elevated debugging.
 - **Librarian** researches external APIs, official docs, and public code examples.
 - **General** executes large, well-defined implementation tasks with the session's enabled tool set.
@@ -450,6 +416,18 @@ Read-only agents (`explore`, `oracle`, `librarian`, `reviewer`, and YAML agents 
 `general` is never fallback-eligible because its full-access mutability means partial retries could leave the workspace in an inconsistent state. YAML agents that include any mutating tool in `allowed_tools` are also ineligible.
 
 Configure via JSON `fallbackModels` (array of strings, max 5, unique, non-empty) or YAML `fallback_models`. `/blackbytes-status` displays the fallback chain with `→` separators; agents configured with `fallbackModels` but ineligible show an `(ineligible)` suffix.
+
+### Delegation ROI
+
+Each delegation is logged to an in-memory, session-scoped log tracking:
+
+- Agent name
+- Start time and duration
+- Success/failure status
+- Tool call count and output size
+- Estimated cost (when available from usage tracking)
+
+The log resets on each session restart. View the current session's delegation metrics via `/blackbytes-status` → **Delegation ROI**, which shows per-agent aggregates: call count, success rate, average duration, and accumulated cost.
 
 ## Development
 
@@ -484,7 +462,7 @@ The extension bootstraps from `src/index.ts` and wires the core session handlers
 - `tool_result` rewrites `read`/`write` results for the hashline workflow
 - `session_shutdown` flushes the buffered logger
 
-Bytes prompt variants live under `src/system-prompt/bytes/` (`default.ts`, `gpt.ts`, `gemini.ts`) and are dispatched by model family resolved from the active model id. Nested delegate sessions are spawned by `src/sub-agents/runner.ts` with `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>`.
+Bytes prompt variants live under `src/system-prompt/bytes/` (`default.ts`, `gpt.ts`, `gemini.ts`, `kimi.ts`) and are dispatched by model family resolved from the active model id. Nested delegate sessions are spawned by `src/sub-agents/runner.ts` with `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>`.
 
 ## Branding
 

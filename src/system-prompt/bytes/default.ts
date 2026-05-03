@@ -21,7 +21,6 @@ const CLAUDE_TAGS: Record<PromptSectionKey, string> = {
   handoff_protocol: "handoff_protocol",
   markdown_format: "markdown_format",
   file_references: "file_references",
-  final_status_spec: "final_status",
   completion_contract: "completion",
 };
 

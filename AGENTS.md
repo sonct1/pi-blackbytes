@@ -60,7 +60,7 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
 3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
 4. Add the icon to `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`
-5. Update the hardcoded agent-name lists in the six affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
+5. Update the hardcoded agent-name lists in the affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
 
 **User-defined sub-agents** are loaded from YAML files in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` via `loadYamlDeclarations()`. Conflicts with builtins or earlier YAML files in the same directory are skipped with a diagnostic (not fatal); `/blackbytes-status` surfaces all skipped files and reasons.
 
@@ -97,11 +97,13 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 
 ### Prompt injection
 
-`before_agent_start` renders a compact Bytes v2 policy overlay from runtime state instead of appending a second static prompt blob. The overlay contains precedence, session-capability, boundary, workflow, and completion sections; it only mentions enabled capabilities, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
+The `before_agent_start` handler renders a capability-aware Bytes v2 policy overlay from runtime state. The overlay contains 15 sections (identity, precedence, autonomy, investigation, session capabilities, hard boundaries, work defaults, tool-use protocol, verification contract, executing-actions-with-care, conditional workflows, handoff protocol, markdown format, file references, and completion contract); it only mentions enabled capabilities, builds a concise positive delegation routing matrix from the enabled sub-agent set, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
 
 ### Sub-agents
 
 Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general,reviewer}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`, which forces `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>` on the nested CLI. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
+
+Each delegation is logged to an in-memory, session-scoped delegation log (`src/sub-agents/delegation-log.ts`) tracking agent, duration, success, tool call count, output size, and cost. The log resets via `resetDelegationLog()` (called from `resetSessionRuntimeState()`). `/blackbytes-status` surfaces per-agent delegation metrics under the "Delegation ROI" section.
 
 Read-only sub-agents (explore, oracle, librarian, reviewer) each declare a `prependSystemPrompt` hook that builds a lightweight (~4 KB) runtime overlay via `src/sub-agents/runtime-overlay.ts`. The overlay carries current date, working directory, and final tool allowlist, and is bounded with `redactSecrets` to strip sensitive values. The General sub-agent uses the larger (~8 KB) safety overlay from `src/sub-agents/general-safety-overlay.ts` instead, which additionally includes AGENTS.md-derived constraints.
 

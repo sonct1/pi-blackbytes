@@ -1,5 +1,71 @@
 # Changelog
 
+## 2.2.0 (2026-05-03)
+
+Minor release that consolidates the delegation surface (merging
+`code-tour` into Explore Tour Mode), streamlines the Bytes overlay,
+and adds session-scoped delegation ROI tracking.
+
+### Added
+
+- **Delegation ROI log** (`src/sub-agents/delegation-log.ts`): in-memory,
+  session-scoped log tracking per-delegation metrics (agent, duration,
+  success, tool call count, output size, cost). `getDelegationSummary()`
+  produces per-agent aggregates (call count, success rate, avg duration,
+  accumulated cost). Log resets via `resetDelegationLog()`, called from
+  `resetSessionRuntimeState()`. New `/blackbytes-status` section
+  **Delegation ROI** (#4 in the picker) surfaces the summary.
+- **Explore Tour Mode**: `delegate_explore` handles guided flow
+  walk-throughs directly. The system prompt includes a **Tour Mode**
+  section; when the question asks how a flow works (entry → handler →
+  side-effect), the agent responds with a one-line summary + numbered
+  `[relpath#L-L](file:///abs/path#L-L) — what · why` steps.
+- **Explore `context` parameter**: optional `context` string scopes the
+  search or tour (specific files, modules, constraints).
+
+### Removed
+
+- **`code-tour` sub-agent** (`src/sub-agents/code-tour.ts`): deleted.
+  Flow walk-through capability is now handled by Explore Tour Mode.
+  Removed from `BUILTIN_DECLARATIONS`, `SUB_AGENTS` metadata,
+  `SUB_AGENT_ICONS`, and all test hardcoded agent-name lists.
+- **`codeTour` capability flag**: removed `codeTour` from
+  `ByteCapability` / `PromptFeatureFlags`. The overlay no longer
+  gates a separate code-tour bullet.
+- **`final_status_spec` prompt section**: merged into
+  `completion_contract`. Removed the key from `PromptSectionKey`,
+  `SECTION_ORDER`, and `CLAUDE_TAGS`.
+- **GPT Verification Gates footer**: removed the explicit
+  "1. Typecheck, 2. Lint, 3. Tests, 4. Build" footer from `gpt.ts`.
+  Verification rules remain in the shared `verification_contract`
+  overlay section.
+
+### Changed
+
+- **Overlay delegation guidance streamlined**: replaced verbose
+  per-agent gating rules (General strict gate, Librarian strict gate,
+  keyword-trigger block) with a concise positive routing matrix.
+  Each enabled agent gets a single-line routing hint; detailed
+  anti-pattern rules live in the respective declaration descriptions.
+  Net overlay size reduced.
+- **Explore description updated**: tool description mentions flow
+  walk-throughs and the `context` parameter.
+- **`/blackbytes-status` picker expanded**: 10 sections (was 9).
+  New section #4 "Delegation ROI" inserted; subsequent sections
+  renumbered.
+
+### Tests
+
+- New `src/sub-agents/__tests__/delegation-log.test.ts` (10 tests).
+- Librarian gating fixture checks updated: L1–L4 and L6 now check
+  declaration description only (guidance moved to descriptions).
+- Overlay tests updated for streamlined routing matrix and removed
+  sections.
+- All hardcoded agent-name lists updated across 5 test files.
+- Total: 600 tests passing in 105 suites.
+
+---
+
 ## 2.1.0 (2026-05-02) — Bytes v2 Phase 4
 
 This is a **minor, additive** release on top of v2.0.0. It ships three of

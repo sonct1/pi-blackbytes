@@ -5,6 +5,7 @@ import { redactSecrets } from "../shared/redact.js";
 import { makeSubAgentRenderCall } from "../tools/_shared/call-render.js";
 import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
+import { logDelegation } from "./delegation-log.js";
 import { type FallbackResult, executeWithFallback, formatAttempts } from "./fallback.js";
 import { buildSystemPrompt } from "./prompt-builder.js";
 import { type ToolHistoryEntry, buildSubAgentRenderResult } from "./render.js";
@@ -336,7 +337,6 @@ const SUB_AGENT_ICONS: Record<string, string> = {
   librarian: "📚",
   general: "⚡",
   reviewer: "📋",
-  "code-tour": "🧭",
 };
 
 /** Derive the primary display key from a declaration's parameter schema. */
@@ -498,6 +498,7 @@ export function registerSubAgent(
             }
           : ((await declaration.resolveModelOverrides?.()) ?? {});
 
+        const delegationStartedAt = Date.now();
         const progress = createProgressReporter({
           agent: declaration.name,
           model: overrides.model,
@@ -570,6 +571,20 @@ export function registerSubAgent(
           statusFromResult(result),
           result.attemptedModels.map((attempt) => attempt.model ?? "(host model)"),
         );
+
+        // Log delegation metrics for ROI observability.
+        const lastDetails = progress.getLastDetails();
+        if (lastDetails) {
+          logDelegation({
+            agent: declaration.name,
+            startedAt: delegationStartedAt,
+            durationMs: lastDetails.elapsedMs,
+            success: result.success,
+            toolCallCount: lastDetails.toolCallCount,
+            outputChars: lastDetails.outputChars,
+            cost: lastDetails.usage?.cost,
+          });
+        }
 
         let text: string;
         if (result.success) {

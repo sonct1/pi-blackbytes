@@ -46,32 +46,24 @@ describe("librarian gating — Bytes overlay", () => {
   const renderWith = (subAgents: string[]) =>
     renderBytesPrompt(createBytesPromptRenderContext("claude", new Set(), new Set(subAgents)));
 
-  it("does NOT contain raw keyword triggers as primary signal", () => {
+  it("does NOT contain verbose keyword trigger rules in overlay (moved to declaration)", () => {
     const prompt = renderWith(["librarian"]);
-    // Old behaviour treated phrases like "research" / "tìm hiểu" as direct triggers.
-    // New behaviour: keyword triggers are explicitly NOT sufficient.
-    assert.match(prompt, /NOT sufficient by themselves/);
-    assert.match(prompt, /must coincide with the \(a\)\+\(b\)\+\(c\)/);
+    // Old verbose gating removed from overlay; routing matrix uses concise positive framing
+    assert.ok(prompt.includes("3+ external sources"));
+    // Detailed anti-patterns now live only in declaration description
+    assert.doesNotMatch(prompt, /NOT sufficient by themselves/);
   });
 
-  it("contains strict (a)(b)(c) gate + DO NOT denylist when librarian enabled", () => {
+  it("contains concise positive routing hint when librarian enabled", () => {
     const prompt = renderWith(["librarian"]);
-    assert.match(prompt, /Librarian gating \(strict\)/);
-    assert.match(prompt, /\(a\) the question requires EXTERNAL information/);
-    assert.match(prompt, /\(b\) it needs MULTIPLE independent sources/);
-    assert.match(prompt, /\(c\) direct tools/);
-    assert.match(prompt, /DO NOT delegate to `librarian`/);
-    assert.match(prompt, /single URL fetch/);
-    assert.match(prompt, /single library docs lookup/);
-    assert.match(prompt, /single GitHub search/);
-    assert.match(prompt, /local-codebase questions/);
+    assert.ok(prompt.includes("`librarian`"));
+    assert.ok(prompt.includes("3+ external sources"));
   });
 
-  it("includes the 5–10× delegate cost signal at the session-capability layer", () => {
+  it("includes the 5–10× delegate cost signal in the workflow section", () => {
     const prompt = renderWith(["librarian", "explore", "oracle"]);
     assert.match(prompt, /Cost signal/);
     assert.match(prompt, /5–10×|5-10×|5-10x|5–10x/);
-    assert.match(prompt, /nested Pi session/);
   });
 
   it("omits all librarian gating when librarian is disabled", () => {
@@ -107,42 +99,41 @@ const fixtures: LibrarianFixture[] = [
     id: "L1",
     request: "Fetch this single URL https://example.com/changelog and summarise it.",
     expected: "direct",
-    check: (g) => /single URL fetch.*web_fetch/i.test(g),
+    check: (_g, d) => /single URL fetch.*web_fetch/i.test(d),
   },
   {
     id: "L2",
     request: "Look up the docs for fast-glob's `globby` API.",
     expected: "direct",
-    check: (g) => /single library docs lookup/i.test(g) && /docs_resolve/i.test(g),
+    check: (_g, d) => /single library docs lookup/i.test(d) && /docs_resolve/i.test(d),
   },
   {
     id: "L3",
     request: "Find usages of `useSyncExternalStore` across public GitHub repos.",
     expected: "direct",
-    check: (g) => /single GitHub search/i.test(g) && /gh_search/i.test(g),
+    check: (_g, d) => /single GitHub code search/i.test(d) && /gh_search/i.test(d),
   },
   {
     id: "L4",
     request: "Where is the auth middleware defined in this repo?",
     expected: "direct",
-    check: (g) =>
-      /local-codebase questions/i.test(g) && /delegate_explore|grep|glob|ast_search/i.test(g),
+    check: (_g, d) =>
+      /local-codebase questions/i.test(d) && /delegate_explore|grep|glob|ast_search/i.test(d),
   },
   {
     id: "L5",
     request:
       "Which of TanStack Query / SWR / RTK-Query is best for our app — give me a current comparison from official docs, recent changelogs, and real production usage examples.",
     expected: "delegate",
-    check: (g) => /MULTIPLE independent sources/i.test(g) && /Librarian gating \(strict\)/i.test(g),
+    check: (_g, d) => /MULTIPLE independent sources/i.test(d) && /ALL of these hold/i.test(d),
   },
   {
     id: "L6",
     request: "Tìm hiểu nhanh xem thư viện này dùng thế nào.",
     expected: "direct",
-    check: (g, _d) => /tìm hiểu/i.test(g) && /NOT sufficient by themselves/i.test(g),
+    check: (_g, d) => /trivial facts/i.test(d),
   },
 ];
-
 describe("librarian gating — fixtures L1..L6", () => {
   const guidance = renderBytesPrompt(
     createBytesPromptRenderContext("claude", new Set(), new Set(["librarian"])),

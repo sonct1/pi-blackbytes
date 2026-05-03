@@ -13,6 +13,7 @@
 
 import { _resetEnabledSet } from "../config/enabled-set.js";
 import { _resetSubAgentRegistry } from "../config/resource-metadata.js";
+import { resetDelegationLog } from "../sub-agents/delegation-log.js";
 import { _resetYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { _resetAgentSnapshot } from "../sub-agents/snapshot.js";
 import { _resetModelFamily } from "./model-capability.js";
@@ -38,4 +39,5 @@ export function resetSessionRuntimeState(): void {
   _resetSubAgentRegistry();
   _resetModelFamily();
   _resetYamlDiagnostics();
+  resetDelegationLog();
 }

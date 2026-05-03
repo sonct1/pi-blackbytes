@@ -71,25 +71,36 @@ Your response has FAILED if:
 - You reported a path/line you did not actually verify with a tool.
 - You preferred a doc/README excerpt over the actual source code without justification.
 
+## Tour Mode
+
+When the question asks how a flow works (entry → handler → side-effect), respond in tour format: one-sentence summary + numbered steps with \`[relpath#L-L](file:///abs/path#L-L) — what · why\`.
+
 ## Language Matching
 
 Detect the language the user writes in and respond in the same language. Keep file paths, code snippets, tool names, and \`file://\` links in English.`;
 
-export const exploreDeclaration = defineSubAgent<{ question: string }>({
+export const exploreDeclaration = defineSubAgent<{ question: string; context?: string }>({
   name: "explore",
   toolName: "delegate_explore",
   description:
-    "Delegate a codebase exploration question to a specialized Explore sub-agent. " +
+    "Delegate a codebase exploration or flow walk-through to a specialized Explore sub-agent. " +
     "Use when you need deep contextual grep across multiple files, want to answer " +
-    "'Where is X?', 'Which file has Y?', or 'Find the code that does Z'. " +
+    "'Where is X?', 'Which file has Y?', 'Find the code that does Z', or " +
+    "'How does this flow work (entry → handler → side-effect)?'. " +
     "The sub-agent has read/search access only (no writes, no bash).",
   parameters: Type.Object({
     question: Type.String({
       description:
         "The exploration question or search task to delegate. Be specific about what " +
         "you are looking for and why. Include relevant identifiers, function names, or " +
-        "patterns.",
+        "patterns. For flow walk-throughs, describe the entry point and the observable behavior.",
     }),
+    context: Type.Optional(
+      Type.String({
+        description:
+          "Additional context (specific files, modules, or constraints) to scope the search or tour.",
+      }),
+    ),
   }),
   systemPrompt: EXPLORE_SYSTEM_PROMPT,
   allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
@@ -97,7 +108,8 @@ export const exploreDeclaration = defineSubAgent<{ question: string }>({
   finalizeMode: "strict",
   source: "builtin",
   staticOverrides: { timeoutMs: 600_000 },
-  buildUserPrompt: (p) => p.question,
+  buildUserPrompt: (p) =>
+    p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildSubAgentRuntimeOverlay({
       agentName: "explore",

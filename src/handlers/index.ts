@@ -19,7 +19,6 @@ import {
   captureAgentStartSystemPrompt,
   captureProviderSystemPrompts,
 } from "../shared/system-prompt-log.js";
-import { codeTourDeclaration } from "../sub-agents/code-tour.js";
 import { declarationToMeta } from "../sub-agents/declaration.js";
 import { setYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { exploreDeclaration } from "../sub-agents/explore.js";
@@ -65,7 +64,6 @@ const BUILTIN_DECLARATIONS = [
   librarianDeclaration,
   generalDeclaration,
   reviewerDeclaration,
-  codeTourDeclaration,
 ];
 export async function handleSessionStart(
   pi: ExtensionAPI,

@@ -95,11 +95,6 @@ export const SUB_AGENTS: readonly SubAgentMeta[] = [
     description: "Read-only code reviewer for diffs, branches, and PRs",
     promptFeatures: ["subagentDelegation"],
   },
-  {
-    name: "code-tour",
-    description: "Read-only code-walkthrough sub-agent for guided file tours",
-    promptFeatures: ["subagentDelegation"],
-  },
 ];
 
 // ---------------------------------------------------------------------------

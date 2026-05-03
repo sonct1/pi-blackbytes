@@ -24,11 +24,6 @@ function buildSessionCapabilitiesBody(context: BytesPromptRenderContext): string
     lines.push(
       "- Specialized sub-agents may be available for codebase exploration, deep reasoning, external-library research, or large implementations.",
     );
-    lines.push(
-      "- **Cost signal**: each `delegate_*` call spawns a nested Pi session (~5–10× more " +
-        "tokens and latency than a direct tool call). Prefer direct tools when 1–2 " +
-        "calls would suffice; delegate only when specialization or scope clearly justifies it.",
-    );
   }
 
   if (context.enabledSubAgents.has("librarian")) {
@@ -36,12 +31,6 @@ function buildSessionCapabilitiesBody(context: BytesPromptRenderContext): string
       "- Consider `librarian` only for non-trivial external research that requires " +
         "multiple sources, current official docs/changelog verification, public code " +
         "examples, or external library/API internals.",
-    );
-  }
-
-  if (context.enabledSubAgents.has("code-tour")) {
-    lines.push(
-      "- `code-tour` walks an existing flow as a numbered (file:line, what, why) list — use to explain *how* code flows.",
     );
   }
 
@@ -82,86 +71,52 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
 
   if (context.features.subagentDelegation) {
     lines.push(
-      "- Delegate when specialization materially reduces search cost, implementation risk, or execution time; do not delegate by reflex.",
+      "- **Default: work directly.** Delegate only when one of these high-value patterns clearly applies:",
     );
-  }
 
-  if (context.enabledSubAgents.has("explore")) {
-    lines.push(
-      "- Use `delegate_explore` for broad or unfamiliar codebase areas, cross-file discovery, " +
-        "or questions like where a behavior is implemented.",
-    );
-  }
+    // Build positive routing matrix based on enabled agents
+    const routes: string[] = [];
 
-  if (context.enabledSubAgents.has("code-tour")) {
-    lines.push(
-      "- Use `delegate_code_tour` when the caller needs a guided walk-through of an existing flow (request → handler → side-effect). Output is a numbered (file:line, what, why) sequence.",
-    );
-  }
+    if (context.enabledSubAgents.has("explore")) {
+      routes.push(
+        "`explore` — broad/unfamiliar codebase search, cross-file discovery, tracing a flow, or guided walk-through of how an existing flow works (entry → handler → side-effect)",
+      );
+    }
+    if (context.enabledSubAgents.has("oracle")) {
+      routes.push(
+        "`oracle` — hard architecture/debugging decision, security/perf trade-off, or after 2 failed attempts",
+      );
+    }
+    if (context.enabledSubAgents.has("general")) {
+      routes.push(
+        "`general` — concrete plan with known file paths + intended changes + verifiable outcome (5+ file edits)",
+      );
+    }
+    if (context.enabledSubAgents.has("reviewer")) {
+      routes.push(
+        "`reviewer` — after significant implementation; pre-fetch diff with `git diff` and pass as `context`",
+      );
+    }
+    if (context.enabledSubAgents.has("librarian")) {
+      routes.push(
+        "`librarian` — needs 3+ external sources (docs + changelog + examples) to answer confidently",
+      );
+    }
 
-  if (context.enabledSubAgents.has("oracle")) {
-    lines.push(
-      "- Use `delegate_oracle` for hard architecture/debugging decisions, security or " +
-        "performance trade-offs, or after two failed fix attempts.",
-    );
-  }
+    if (routes.length > 0) {
+      for (const route of routes) {
+        lines.push(`  - ${route}`);
+      }
+    }
 
-  if (context.enabledSubAgents.has("general")) {
     lines.push(
-      "- Use `delegate_general` only for well-scoped multi-file implementation work after " +
-        "the desired behavior and file scope are clear.",
-    );
-    lines.push(
-      "- **General gating (strict)** — only delegate when ALL of these hold: " +
-        "(a) the plan is concrete (file paths and intended changes already known, " +
-        "no exploration needed inside); AND (b) the work is large enough to justify " +
-        "nested-Pi cost (~5+ file edits OR ~20K+ tokens of read/edit/verify churn); " +
-        "AND (c) the outcome is verifiable from outside (tests pass, diff inspectable, " +
-        "lint clean).",
-    );
-    lines.push(
-      "- **DO NOT delegate to `general`** for: single-file edits, exploratory or " +
-        "ambiguous tasks, work where the parent needs intermediate results mid-stream, " +
-        "refactors whose plan must evolve as you read code, or anything the parent " +
-        "can finish in 5–10 direct tool calls. When in doubt, do it directly.",
+      "- **Cost signal**: each delegation = ~5–10× tokens/latency. If 1–2 direct tool calls suffice, do it yourself.",
     );
   }
 
   if (context.enabledSubAgents.has("reviewer")) {
     lines.push(
-      "- Use `delegate_reviewer` after significant implementation, before commits/PRs, " +
-        "or when the user asks for review, fresh eyes, or a final check.",
-    );
-    lines.push(
-      "- **Reviewer pre-fetch**: BEFORE calling `delegate_reviewer`, run " +
-        "`git diff --merge-base origin/HEAD HEAD` (or the appropriate base) and " +
-        "`git ls-files --others --exclude-standard`, then pass the diff/file list as " +
-        "the `context` parameter. NEVER call `delegate_reviewer` with empty context — " +
-        "the sub-agent has no `bash`/`git` access and cannot fetch the diff itself.",
-    );
-  }
-
-  if (context.enabledSubAgents.has("librarian")) {
-    lines.push(
-      "- **Librarian gating (strict)** — only delegate when ALL of these hold: " +
-        "(a) the question requires EXTERNAL information not present in the local " +
-        "repository; AND (b) it needs MULTIPLE independent sources to answer (e.g. " +
-        "official docs + version-aware changelog + real-world usage), or it requires " +
-        "an authoritative current-year answer that may have changed; AND (c) direct " +
-        "tools (`docs_resolve`/`docs_query`/`web_search`/`web_fetch`/`gh_search`) " +
-        "would each be insufficient on their own.",
-    );
-    lines.push(
-      "- **DO NOT delegate to `librarian`** for: a single URL fetch (use `web_fetch`); " +
-        "a single library docs lookup (`docs_resolve` → `docs_query`); a single " +
-        "GitHub search (`gh_search`); local-codebase questions (use `delegate_explore` " +
-        "or `grep`/`glob`/`ast_search`); trivial facts; reformulating already-known " +
-        "information; or any task whose answer lives in the working directory.",
-    );
-    lines.push(
-      '- Keyword triggers like "research", "investigate", "tìm hiểu", or ' +
-        '"tra cứu" are NOT sufficient by themselves — they must coincide with the ' +
-        "(a)+(b)+(c) gate above.",
+      "- **Reviewer pre-fetch**: run `git diff --merge-base origin/HEAD HEAD` and pass the diff as `context`. The reviewer has no `bash`/`git` access.",
     );
   }
 
@@ -202,12 +157,10 @@ const PRECEDENCE_BODY = [
 ].join("\n");
 
 const AUTONOMY_BODY = [
-  "- Treat every user message — including interruptions, corrections, and short replies — as a refinement of the original spec; adapt without defensiveness.",
-  "- Unless the user explicitly asks for a plan or is asking a question, assume they want code changes; implement instead of describing.",
-  "- Persist until the task is fully handled: implementation, verification, and a clear explanation of outcomes. Do not stop at partial fixes unless the user pauses or redirects you.",
-  "- When the user says 'continue', 'go on', or similar, treat that as a directive to keep working on the current task.",
-  "- If you spot a misconception in the user's request or notice an adjacent bug, say so — be a collaborator, not a passive executor.",
-  "- If an approach fails, diagnose why before switching tactics. Do not retry the identical action blindly, but do not abandon a viable approach after a single failure.",
+  "- Assume the user wants code changes unless they explicitly ask for a plan or question. Implement instead of describing.",
+  "- Persist until the task is fully handled: implementation, verification, outcome report. Adapt to corrections without defensiveness.",
+  "- If you spot a misconception or adjacent bug, say so — be a collaborator, not a passive executor.",
+  "- If an approach fails, diagnose why before switching tactics. Do not retry blindly, but do not abandon a viable approach after one failure.",
 ].join("\n");
 
 const INVESTIGATE_BODY = [
@@ -272,15 +225,9 @@ const FILE_REFERENCES_BODY = [
   "- Do not show raw URLs to users when a fluent link conveys the same information.",
 ].join("\n");
 
-const FINAL_STATUS_BODY = [
-  "- End each completed task with a short final-status block: 2–10 lines.",
-  "- Cover: what changed and why (1–3 lines), files touched (concise list), verification results (commands run + outcome).",
-  "- Do not narrate the process. Do not pad. If a verification step was skipped or impossible, say so explicitly rather than implying success.",
-].join("\n");
-
-const COMPLETION_CONTRACT_BODY = [
-  "- When work is complete, report what changed, which files changed, and why.",
-  "- State verification results honestly, including any relevant failures outside the current scope.",
+const COMPLETION_BODY = [
+  "- End each completed task with a short final-status block (2–10 lines): what changed and why, files touched, verification results (commands run + outcome).",
+  "- State verification results honestly; if a step was skipped or impossible, say so explicitly.",
   "- Create a git commit only if the user explicitly asked for one.",
   "- Note follow-up work concisely, but do not start it without being asked.",
 ].join("\n");
@@ -315,8 +262,7 @@ export function buildBytesPromptOverlay(context: BytesPromptRenderContext): Prom
   sections.push(
     section("Markdown Format", "markdown_format", MARKDOWN_BODY),
     section("File References", "file_references", FILE_REFERENCES_BODY),
-    section("Final Status", "final_status_spec", FINAL_STATUS_BODY),
-    section("Completion Contract", "completion_contract", COMPLETION_CONTRACT_BODY),
+    section("Completion", "completion_contract", COMPLETION_BODY),
   );
   return sections;
 }

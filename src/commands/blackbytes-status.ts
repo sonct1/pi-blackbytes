@@ -4,6 +4,7 @@ import {
   getSystemPromptLogConfig,
   resolveSystemPromptLogPath,
 } from "../shared/system-prompt-log.js";
+import { getDelegationSummary } from "../sub-agents/delegation-log.js";
 import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { getAgentSnapshot } from "../sub-agents/snapshot.js";
 import type { AgentSnapshot } from "../sub-agents/snapshot.js";
@@ -174,6 +175,7 @@ interface StatusSections {
   enabledTools: string[];
   enabledSubAgents: string[];
   enabledSkills: string[];
+  delegationRoi: string[];
   systemPromptLog: string[];
   compactTools: string[];
   reserved: string[];
@@ -262,6 +264,7 @@ async function buildStatusSections(): Promise<StatusSections> {
       "### Enabled Skills",
       ...(enabledSet ? [...enabledSet.skills].map((s) => `- ${s}`) : ["_Not initialized._"]),
     ],
+    delegationRoi: ["### Delegation ROI", getDelegationSummary()],
     systemPromptLog: systemPromptLogLines,
     compactTools: compactToolsLines,
     reserved: reservedLines,
@@ -280,6 +283,8 @@ function buildFullOutput(sections: StatusSections): string {
     ...sections.enabledSubAgents,
     "",
     ...sections.enabledSkills,
+    "",
+    ...sections.delegationRoi,
     "",
     ...sections.systemPromptLog,
     "",
@@ -303,6 +308,7 @@ const SECTION_MENU: Array<{ label: string; key: keyof StatusSections }> = [
   { label: "Enabled Tools", key: "enabledTools" },
   { label: "Enabled Sub-Agents", key: "enabledSubAgents" },
   { label: "Enabled Skills", key: "enabledSkills" },
+  { label: "Delegation ROI", key: "delegationRoi" },
   { label: "Sub-Agent Snapshot", key: "snapshot" },
   { label: "YAML Diagnostics", key: "yaml" },
   { label: "System Prompt Log", key: "systemPromptLog" },

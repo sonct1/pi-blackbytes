@@ -178,7 +178,7 @@ describe("handoff tool", () => {
   it("propagates parent's enabled extension tools + Pi built-ins to nested allowlist", async () => {
     const { spawn, captured } = makeSpawnCapture({ success: true, content: "ok" });
     const enabled = makeEnabledSet({
-      tools: new Set(["hashline_edit", "grep", "glob", "web_search"]),
+      tools: new Set(["hashline_edit", "ast_search", "glob", "web_search"]),
     });
     await executeHandoff(
       { goal: "g" },
@@ -186,7 +186,7 @@ describe("handoff tool", () => {
     );
     const allowed = new Set(captured[0].options.allowedTools);
     // Parent's enabled extension tools must be present.
-    for (const name of ["hashline_edit", "grep", "glob", "web_search"]) {
+    for (const name of ["hashline_edit", "ast_search", "glob", "web_search"]) {
       assert.ok(allowed.has(name), `expected nested allowlist to include ${name}`);
     }
     // Pi built-ins must be present (handoff is full-access).
@@ -199,7 +199,7 @@ describe("handoff tool", () => {
   it("respects parent's disabled_tools — disabled extension tools are excluded from nested allowlist", async () => {
     const { spawn, captured } = makeSpawnCapture({ success: true, content: "ok" });
     const enabled = makeEnabledSet({
-      tools: new Set(["hashline_edit", "grep", "glob"]),
+      tools: new Set(["hashline_edit", "ast_search", "glob"]),
       // User explicitly disabled `bash` and `web_search`. Even though `bash`
       // is a Pi built-in (not in `tools`), the global denylist must still
       // strip it from the nested allowlist.
@@ -224,7 +224,7 @@ describe("handoff tool", () => {
     const { spawn, captured } = makeSpawnCapture({ success: true, content: "ok" });
     const enabled = makeEnabledSet({
       // Include delegate_* names as if they were enabled (simulating misuse).
-      tools: new Set(["hashline_edit", "delegate_explore", "delegate_oracle", "grep"]),
+      tools: new Set(["hashline_edit", "delegate_explore", "delegate_oracle", "ast_search"]),
     });
     await executeHandoff(
       { goal: "g" },

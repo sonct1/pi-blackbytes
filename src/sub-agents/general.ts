@@ -18,7 +18,7 @@ The host prepends a safety/context overlay with the **finalized allowed tool lis
 Depending on session configuration, your tools may include:
 - \`read\` — read file contents
 - \`${TOOL_NAMES.GLOB}\` — find files by pattern
-- \`${TOOL_NAMES.GREP}\` — search file contents
+- \`grep\` — search file contents
 - \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware search
 - \`${TOOL_NAMES.AST_REPLACE}\` — AST-aware bulk replace
 - \`write\` — write files

@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.3.0 (2026-05-05)
+
+Removes the extension's bundled `grep` tool. Pi's built-in `grep` (available
+since Pi 0.67) provides equivalent ripgrep-backed content search with regex,
+glob filtering, context lines, and result limits. Sub-agents continue to
+receive `grep` in their tool allowlists — it resolves to Pi's built-in
+implementation via `PI_BUILTIN_TOOLS`.
+
+### Removed
+
+- **Extension `grep` tool** (`src/tools/grep/`): deleted implementation,
+  registration, and tests. `TOOL_NAMES.GREP` removed from
+  `resource-metadata.ts`; `BUNDLED_TOOLS` drops from 7 to 6 entries;
+  `ALL_TOOL_NAMES` drops from 12 to 11.
+
+### Changed
+
+- Sub-agent declarations (`explore`, `oracle`, `reviewer`, `librarian`,
+  `general`) reference `"grep"` as a literal Pi built-in instead of
+  `TOOL_NAMES.GREP`.
+- Documentation (`README.md`, `AGENTS.md`) updated to reflect the current
+  tool surface, peer dependencies (`^0.69.0`, `typebox@*`), and dependency
+  list (`zod`, `fast-glob`, `yaml`).
+
+### Tests
+
+- `delegable-tools.test.ts`: `isDelegableTool("grep")` moved from the
+  "extension tools" test to the "Pi built-ins" test.
+- 14 test files updated to replace extension-grep references with other
+  extension tool names in mock data and assertions.
+- Total: 592 tests passing in 103 suites.
+
+---
+
 ## 2.2.0 (2026-05-03)
 
 Minor release that consolidates the delegation surface (merging

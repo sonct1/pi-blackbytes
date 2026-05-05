@@ -147,7 +147,7 @@ describe("integration: config loading — loadBlackbytesConfig()", () => {
       tmpDir,
       JSON.stringify({
         blackbytes: {
-          disabled_tools: ["grep"],
+          disabled_tools: ["glob"],
           disabled_sub_agents: ["oracle"],
           hashline_edit: false,
           copilot_initiator_header: false,
@@ -157,7 +157,7 @@ describe("integration: config loading — loadBlackbytesConfig()", () => {
 
     const cfg = await loadBlackbytesConfig();
 
-    assert.deepEqual(cfg.disabled_tools, ["grep"]);
+    assert.deepEqual(cfg.disabled_tools, ["glob"]);
     assert.deepEqual(cfg.disabled_sub_agents, ["oracle"]);
     assert.equal(cfg.hashline_edit, false);
     assert.equal(cfg.copilot_initiator_header, false);

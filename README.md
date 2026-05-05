@@ -122,7 +122,7 @@ Running `/blackbytes-status` opens an interactive section picker rather than pri
 A compact summary line is always shown first regardless of which section is selected:
 
 ```
-Tools: **14** enabled | Agents: **5** enabled | Skills: **2** enabled
+Tools: **11** enabled | Agents: **5** enabled | Skills: **2** enabled
 ```
 
 ### Section picker
@@ -252,14 +252,13 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 | **Collapsed** (default) | A one-line summary with a `✓` (success) or `✗` (error) icon, followed by a brief summary and a `ctrl+o to expand` hint |
 | **Expanded** (`Ctrl+O`) | Full tool output in `toolOutput` color |
 
-**Compact Pi built-in rendering**: When `compact_tools.enabled` is true, Blackbytes wraps Pi's built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` tools so collapsed results render as one-line summaries with `✓`/`✗` icons, paths, and metadata. Expanded results still use Pi's original renderers. Blackbytes does not replace its own bundled `grep` implementation with Pi's built-in `grep`; the bundled `grep` already renders compact summaries and keeps its Blackbytes-specific parameters.
+**Compact Pi built-in rendering**: When `compact_tools.enabled` is true, Blackbytes wraps Pi's built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` tools so collapsed results render as one-line summaries with `✓`/`✗` icons, paths, and metadata. Expanded results still use Pi's original renderers.
 
 ### Bundled local tools
 
 | Tool | Icon | Purpose |
 |---|---|---|
 | `glob` | 📂 | Fast file pattern matching with safety limits |
-| `grep` | 🔍 | Regex content search with include filters, optional context lines, and multiple output modes (`content`, `files_with_matches`, `count`). Uses `ripgrep` when available and falls back to a Node.js implementation. |
 | `ast_search` | 🌳 | AST-aware structural search across 25 languages |
 | `ast_replace` | ✏️ | AST-aware structural rewrite with dry-run default |
 | `hashline_edit` | ✎ | LINE#ID-anchored file editing with snapshot semantics |
@@ -488,7 +487,3 @@ Check `disabled_tools` and `disabled_sub_agents`, then start a new session so th
 ### `ast_search` / `ast_replace` fail immediately
 
 Install `ast-grep` (`sg`) and ensure it is on `PATH`.
-
-### `grep` is slower than expected
-
-Install `ripgrep` (`rg`). Blackbytes uses it when available and falls back to a Node.js implementation otherwise.

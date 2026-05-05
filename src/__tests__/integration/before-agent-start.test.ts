@@ -162,7 +162,7 @@ describe("integration: before_agent_start", () => {
     try {
       const settings = {
         blackbytes: {
-          disabled_tools: ["grep"],
+          disabled_tools: ["glob"],
           disabled_sub_agents: [],
         },
       };

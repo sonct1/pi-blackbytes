@@ -42,7 +42,7 @@ describe("enabled-set", () => {
     const set = computeEnabledSet(defaultConfig);
     assert.ok(set.tools.has("hashline_edit"));
     assert.ok(set.tools.has("gh_search"));
-    assert.equal(set.tools.size, 12);
+    assert.equal(set.tools.size, 11);
     assert.ok(set.subAgents.has("explore"));
     assert.ok(set.subAgents.has("oracle"));
     assert.equal(set.subAgents.size, 5);
@@ -53,13 +53,13 @@ describe("enabled-set", () => {
   it("disabled_tools removes specific tools", () => {
     const config: BlackbytesConfig = {
       ...defaultConfig,
-      disabled_tools: ["hashline_edit", "grep"],
+      disabled_tools: ["hashline_edit", "glob"],
     };
     const set = computeEnabledSet(config);
     assert.ok(!set.tools.has("hashline_edit"));
-    assert.ok(!set.tools.has("grep"));
-    assert.ok(set.tools.has("glob"));
-    assert.equal(set.tools.size, 10);
+    assert.ok(!set.tools.has("glob"));
+    assert.ok(set.tools.has("ast_search"));
+    assert.equal(set.tools.size, 9);
   });
 
   it("disabled_sub_agents removes specific sub-agents", () => {

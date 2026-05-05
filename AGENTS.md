@@ -1,6 +1,6 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
+Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `glob`, `handoff`, `look_at`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
 
 ## Commands
 
@@ -128,10 +128,10 @@ Tool icons are unique per tool to avoid visual ambiguity when scanning call line
 
 ## Key constraints
 
-- Peer dependency: `@mariozechner/pi-coding-agent@^0.67`
+- Peer dependency: `@mariozechner/pi-coding-agent@^0.69.0`, `typebox@*`
 - Node `>=20`
 - Package budget: `< 500KB` gzipped
-- Dependencies stay minimal: `zod`, `@sinclair/typebox`, `fast-glob`, `yaml`
+- Dependencies stay minimal: `zod`, `fast-glob`, `yaml`
 - `processToolResult` returns a new object; handlers must write `modified.content` back to the mutable event
 
 ---

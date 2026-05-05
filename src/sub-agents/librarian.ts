@@ -16,7 +16,7 @@ You do not implement. You research and report.
 **Read-only + research tools:**
 - \`read\` — read local file contents
 - \`${TOOL_NAMES.GLOB}\` — find local files by pattern
-- \`${TOOL_NAMES.GREP}\` — search local file contents
+- \`grep\` — search local file contents
 - \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search (local)
 - \`${TOOL_NAMES.WEB_SEARCH}\` — web search for documentation, blog posts, changelogs
 - \`${TOOL_NAMES.WEB_FETCH}\` — fetch specific URLs for deeper content
@@ -137,7 +137,7 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   systemPrompt: LIBRARIAN_SYSTEM_PROMPT,
   allowedTools: [
     "read",
-    TOOL_NAMES.GREP,
+    "grep",
     TOOL_NAMES.GLOB,
     TOOL_NAMES.AST_SEARCH,
     TOOL_NAMES.WEB_SEARCH,

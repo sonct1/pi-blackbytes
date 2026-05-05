@@ -72,7 +72,7 @@ describe("integration: session_start", () => {
     try {
       const settings = {
         blackbytes: {
-          disabled_tools: ["grep"],
+          disabled_tools: ["glob"],
           disabled_sub_agents: [],
         },
       };
@@ -96,11 +96,15 @@ describe("integration: session_start", () => {
       const enabledSet = getEnabledSet();
       assert.ok(enabledSet, "enabledSet should be initialised after session_start");
 
-      // "grep" was in disabled_tools, so it must not appear in tools
-      assert.equal(enabledSet.tools.has("grep"), false, "'grep' should be disabled");
+      // "glob" was in disabled_tools, so it must not appear in tools
+      assert.equal(enabledSet.tools.has("glob"), false, "'glob' should be disabled");
 
       // Other tools should still be present
-      assert.equal(enabledSet.tools.has("glob"), true, "'glob' should still be enabled");
+      assert.equal(
+        enabledSet.tools.has("ast_search"),
+        true,
+        "'ast_search' should still be enabled",
+      );
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
     }
@@ -180,7 +184,11 @@ describe("integration: session_start", () => {
 
       // With default config all DEFAULT_TOOLS should be present
       assert.equal(enabledSet.tools.has("glob"), true, "'glob' should be in default tool set");
-      assert.equal(enabledSet.tools.has("grep"), true, "'grep' should be in default tool set");
+      assert.equal(
+        enabledSet.tools.has("ast_search"),
+        true,
+        "'ast_search' should be in default tool set",
+      );
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
     }
@@ -332,7 +340,10 @@ describe("integration: session_start idempotency", () => {
 
   it("two consecutive session_start calls in the same process do not throw", async () => {
     tmpDir = await makeTempDir();
-    await writeSettings(tmpDir, JSON.stringify({ blackbytes: { disabled_tools: ["grep"] } }));
+    await writeSettings(
+      tmpDir,
+      JSON.stringify({ blackbytes: { disabled_tools: ["hashline_edit"] } }),
+    );
     process.env.PI_AGENT_DIR = tmpDir;
     const mock = createMockPi();
     bootstrap(mock);
@@ -341,9 +352,9 @@ describe("integration: session_start idempotency", () => {
     mock.emit("session_start", {});
     await waitForEnabledSet();
     const first = getEnabledSet();
-    assert.equal(first.tools.has("grep"), false);
+    assert.equal(first.tools.has("hashline_edit"), false);
 
-    // Mutate disk: enable grep again, disable glob.
+    // Mutate disk: re-enable hashline_edit, disable glob.
     await writeSettings(tmpDir, JSON.stringify({ blackbytes: { disabled_tools: ["glob"] } }));
 
     // Second startup must succeed (no "already initialized", no duplicate
@@ -352,7 +363,11 @@ describe("integration: session_start idempotency", () => {
     // Allow second startup to complete.
     await new Promise<void>((r) => setTimeout(r, 300));
     const second = getEnabledSet();
-    assert.equal(second.tools.has("grep"), true, "grep should be re-enabled by new config");
+    assert.equal(
+      second.tools.has("hashline_edit"),
+      true,
+      "hashline_edit should be re-enabled by new config",
+    );
     assert.equal(second.tools.has("glob"), false, "glob should now be disabled");
   });
 

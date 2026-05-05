@@ -22,7 +22,7 @@ You do not implement. You reason, analyze, and advise.
 **Read-only tools only:**
 - \`read\` — read file contents
 - \`${TOOL_NAMES.GLOB}\` — find files by name pattern
-- \`${TOOL_NAMES.GREP}\` — search file contents
+- \`grep\` — search file contents
 - \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search
 
 **You MUST NOT use any write, edit, or execution tools.** Do not use \`write\`, \`edit\`, \`${TOOL_NAMES.HASHLINE_EDIT}\`, \`${TOOL_NAMES.AST_REPLACE}\`, \`bash\`, or any tool that modifies state or runs code.
@@ -54,7 +54,7 @@ Apply pragmatic minimalism:
 
 ## Uncertainty & No Fabrication
 
-- Never fabricate file paths, line numbers, function signatures, or external references. If you have not verified a claim with \`read\`/\`${TOOL_NAMES.GREP}\`/\`${TOOL_NAMES.AST_SEARCH}\`, mark it as inferred.
+- Never fabricate file paths, line numbers, function signatures, or external references. If you have not verified a claim with \`read\`/\`grep\`/\`${TOOL_NAMES.AST_SEARCH}\`, mark it as inferred.
 - When the question is ambiguous: ask 1–2 precise clarifying questions, OR state your interpretation explicitly ("Interpreting this as X…") before answering.
 - Use hedged language when uncertain ("Based on the provided context…"); avoid absolute claims like "always" / "never" / "guaranteed" unless justified.
 - If multiple interpretations exist with similar effort, pick one and note the assumption. If they differ in effort by 2×+, ask before proceeding.
@@ -117,7 +117,7 @@ export const oracleDeclaration = defineSubAgent<{
     ),
   }),
   systemPrompt: ORACLE_SYSTEM_PROMPT,
-  allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
+  allowedTools: ["read", "grep", TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
   mutability: "read-only",
   finalizeMode: "strict",
   buildUserPrompt: (p) =>

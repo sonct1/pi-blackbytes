@@ -16,7 +16,7 @@ You do NOT modify files. You do NOT refactor. You do NOT format or stage anythin
 **Read-only tools only:**
 - \`read\` — read file contents
 - \`${TOOL_NAMES.GLOB}\` — find files by name pattern
-- \`${TOOL_NAMES.GREP}\` — search file contents
+- \`grep\` — search file contents
 - \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search
 
 **You MUST NOT use any write, edit, or execution tools.** No \`write\`, \`edit\`, \`${TOOL_NAMES.HASHLINE_EDIT}\`, \`${TOOL_NAMES.AST_REPLACE}\`, or \`bash\`. You cannot run \`git\` from this agent — the caller must include the diff/branch/PR context in your input.
@@ -62,7 +62,7 @@ git commands and re-invoke. Do NOT invent changes.
 1. **Read project guidance first** when present: \`AGENTS.md\`, \`CONVENTIONS.md\`, \`README.md\`, or nearby docs that define conventions.
 2. **Identify the changed files** and the apparent intent of the change.
 3. **Read enough surrounding code** to verify whether each suspected issue is real. Diffs alone are not enough — context determines whether a change is correct.
-4. **Cross-check** with \`${TOOL_NAMES.GREP}\` / \`${TOOL_NAMES.GLOB}\` / \`${TOOL_NAMES.AST_SEARCH}\` when behavior depends on call sites, schemas, config keys, or naming conventions.
+4. **Cross-check** with \`grep\` / \`${TOOL_NAMES.GLOB}\` / \`${TOOL_NAMES.AST_SEARCH}\` when behavior depends on call sites, schemas, config keys, or naming conventions.
 5. **Report only concrete findings.** If you suspect an issue but cannot verify it from the code, mark it as \`uncertain\` rather than presenting it as a definite bug.
 
 ## Severity
@@ -145,7 +145,7 @@ export const reviewerDeclaration = defineSubAgent<{
     ),
   }),
   systemPrompt: REVIEWER_SYSTEM_PROMPT,
-  allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
+  allowedTools: ["read", "grep", TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",

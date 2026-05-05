@@ -42,12 +42,13 @@ describe("DELEGABLE_TOOL_NAMES", () => {
 
 describe("isDelegableTool", () => {
   it("returns true for extension tools", () => {
-    assert.equal(isDelegableTool("grep"), true);
     assert.equal(isDelegableTool("ast_search"), true);
+    assert.equal(isDelegableTool("glob"), true);
   });
 
-  it("returns true for Pi defaults", () => {
+  it("returns true for Pi built-ins", () => {
     assert.equal(isDelegableTool("read"), true);
+    assert.equal(isDelegableTool("grep"), true);
   });
 
   it("returns false for unknown tools", () => {
@@ -168,7 +169,7 @@ describe("resolveToolStrategy", () => {
     it("does not include Pi defaults", () => {
       const result = resolveToolStrategy({ kind: "all-except-delegates" }, enabledTools);
       assert.ok(!result.includes("read")); // Pi default NOT included
-      assert.ok(result.includes("grep")); // extension tool included
+      assert.ok(result.includes("grep")); // from mock enabledTools set
     });
 
     it("returns all enabled when no delegates present", () => {

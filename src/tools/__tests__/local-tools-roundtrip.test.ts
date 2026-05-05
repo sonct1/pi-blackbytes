@@ -7,7 +7,6 @@ import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../config/schema.js";
 import { computeCID } from "../../utils/cid.js";
 import { registerGlobTool } from "../glob/index.js";
-import { registerGrepTool } from "../grep/index.js";
 import { registerHashlineEditTool } from "../hashline-edit/index.js";
 
 interface ToolResultLike {
@@ -57,7 +56,7 @@ describe("bundled local tools — round trip", () => {
     _resetEnabledSet();
   });
 
-  it("registers and exercises glob, grep, and hashline_edit against a temp project", async () => {
+  it("registers and exercises glob and hashline_edit against a temp project", async () => {
     const targetFile = join(tmpRoot, "src", "sample.ts");
     const firstLine = 'export const token = "MAGIC_TOKEN";';
     writeFileSync(targetFile, `${firstLine}\nexport const other = 1;\n`, "utf8");
@@ -66,11 +65,10 @@ describe("bundled local tools — round trip", () => {
     const { pi, registered } = makeMockPi();
     const extensionApi = pi as unknown as Parameters<typeof registerGlobTool>[0];
     registerGlobTool(extensionApi);
-    registerGrepTool(extensionApi);
     registerHashlineEditTool(extensionApi);
 
     const tools = new Map(registered.map((tool) => [tool.name, tool]));
-    assert.deepEqual([...tools.keys()].sort(), ["glob", "grep", "hashline_edit"]);
+    assert.deepEqual([...tools.keys()].sort(), ["glob", "hashline_edit"]);
 
     const globResult = await tools.get("glob")!.execute("glob-call", {
       pattern: "**/*.ts",
@@ -78,14 +76,6 @@ describe("bundled local tools — round trip", () => {
     });
     assert.equal(globResult.isError, undefined);
     assert.match(textOf(globResult), /sample\.ts/);
-
-    const grepResult = await tools.get("grep")!.execute("grep-call", {
-      pattern: "MAGIC_TOKEN",
-      path: tmpRoot,
-      output_mode: "files_with_matches",
-    });
-    assert.equal(grepResult.isError, undefined);
-    assert.match(textOf(grepResult), /sample\.ts/);
 
     const lineRef = `1#${computeCID(1, firstLine)}`;
     const editResult = await tools.get("hashline_edit")!.execute("edit-call", {

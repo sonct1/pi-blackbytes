@@ -16,7 +16,7 @@ You are spawned by the primary Bytes agent to handle broad codebase searches. Yo
 **Read-only tools only:**
 - \`read\` — read file contents
 - \`${TOOL_NAMES.GLOB}\` — find files by name pattern
-- \`${TOOL_NAMES.GREP}\` — search file contents by regex
+- \`grep\` — search file contents by regex
 - \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search
 
 **You MUST NOT use any write or edit tools.** Do not use \`write\`, \`edit\`, \`${TOOL_NAMES.HASHLINE_EDIT}\`, \`${TOOL_NAMES.AST_REPLACE}\`, \`bash\`, or any tool that modifies files or runs commands.
@@ -25,7 +25,7 @@ You are spawned by the primary Bytes agent to handle broad codebase searches. Yo
 
 Map the question to the right primitive:
 - **Structural patterns** (function shape, class/interface declarations, JSX/TSX nodes): \`${TOOL_NAMES.AST_SEARCH}\`.
-- **Text patterns** (identifiers, strings, log messages, comments): \`${TOOL_NAMES.GREP}\`.
+- **Text patterns** (identifiers, strings, log messages, comments): \`grep\`.
 - **File discovery** (by name/extension/path glob): \`${TOOL_NAMES.GLOB}\`.
 - **Verification / context**: \`read\` the candidate files before reporting.
 
@@ -103,7 +103,7 @@ export const exploreDeclaration = defineSubAgent<{ question: string; context?: s
     ),
   }),
   systemPrompt: EXPLORE_SYSTEM_PROMPT,
-  allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
+  allowedTools: ["read", "grep", TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",

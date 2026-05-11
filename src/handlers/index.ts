@@ -40,6 +40,7 @@ import { registerGrepAppSearchTool } from "../tools/grep-app/search.js";
 import { registerHandoffTool } from "../tools/handoff/register.js";
 import { registerHashlineEditTool } from "../tools/hashline-edit/index.js";
 import { registerLookAtTool } from "../tools/look-at/register.js";
+import { registerAskUserQuestionTool } from "../tools/ask-user-question/index.js";
 import { registerWebsearchFetchTool } from "../tools/websearch/fetch.js";
 import { registerWebsearchSearchTool } from "../tools/websearch/search.js";
 import { injectPromptAugmentation } from "./before-agent-start.js";
@@ -108,6 +109,7 @@ export async function handleSessionStart(
   registerGlobTool(pi);
   registerHandoffTool(pi);
   registerLookAtTool(pi);
+  registerAskUserQuestionTool(pi);
 
   // HTTP-based tool groups
   registerWebsearchSearchTool(pi);

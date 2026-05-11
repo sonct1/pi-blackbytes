@@ -42,7 +42,7 @@ describe("enabled-set", () => {
     const set = computeEnabledSet(defaultConfig);
     assert.ok(set.tools.has("hashline_edit"));
     assert.ok(set.tools.has("gh_search"));
-    assert.equal(set.tools.size, 11);
+    assert.equal(set.tools.size, 12);
     assert.ok(set.subAgents.has("explore"));
     assert.ok(set.subAgents.has("oracle"));
     assert.equal(set.subAgents.size, 5);
@@ -59,7 +59,7 @@ describe("enabled-set", () => {
     assert.ok(!set.tools.has("hashline_edit"));
     assert.ok(!set.tools.has("glob"));
     assert.ok(set.tools.has("ast_search"));
-    assert.equal(set.tools.size, 9);
+    assert.equal(set.tools.size, 10);
   });
 
   it("disabled_sub_agents removes specific sub-agents", () => {

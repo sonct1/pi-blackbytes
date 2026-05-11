@@ -17,6 +17,7 @@ export const TOOL_NAMES = {
   GH_SEARCH: "gh_search",
   HANDOFF: "handoff",
   LOOK_AT: "look_at",
+  ASK_USER_QUESTION: "ask_user_question",
 } as const;
 
 export interface ToolMeta {
@@ -44,6 +45,7 @@ export const BUNDLED_TOOLS: readonly ToolMeta[] = [
   { name: TOOL_NAMES.GLOB },
   { name: TOOL_NAMES.HANDOFF, promptFeatures: ["handoffEnabled"] },
   { name: TOOL_NAMES.LOOK_AT },
+  { name: TOOL_NAMES.ASK_USER_QUESTION },
 ];
 
 export const TOOL_GROUPS: readonly ToolGroupMeta[] = [

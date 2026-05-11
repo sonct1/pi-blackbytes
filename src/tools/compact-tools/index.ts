@@ -270,7 +270,7 @@ function withCompactRenderResult<TParams extends TSchema, TDetails, TState>(
     renderResult(result, options, theme, context) {
       if (options.expanded) {
         return originalRenderResult
-          ? originalRenderResult(result, options, theme, context)
+          ? originalRenderResult(result, options, theme, { ...context, lastComponent: undefined })
           : fallbackExpandedResult(result, theme);
       }
       if (options.isPartial) {
